@@ -2,7 +2,7 @@ name: tiwa-dev
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tiwa}
@@ -21,7 +21,7 @@ services:
       - tiwa-net
 
   redis:
-    image: redis:7-alpine
+    image: redis:7
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:

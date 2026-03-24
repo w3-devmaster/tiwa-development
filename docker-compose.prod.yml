@@ -2,7 +2,7 @@ name: tiwa-prod
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -24,7 +24,7 @@ services:
           memory: 1g
 
   redis:
-    image: redis:7-alpine
+    image: redis:7
     restart: always
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
@@ -77,7 +77,7 @@ services:
       MONGO_URI: ${MONGO_URI}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
-      BACKEND_PORT: ${BACKEND_PORT:-4000}
+      BACKEND_PORT: 6786
       GITHUB_APP_ID: ${GITHUB_APP_ID}
       GITHUB_PRIVATE_KEY: ${GITHUB_PRIVATE_KEY}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
@@ -85,7 +85,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEFAULT_MODEL: ${DEFAULT_MODEL}
     ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      - "6786:6786"
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,7 +94,7 @@ services:
       mongodb:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6786/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -147,7 +147,7 @@ services:
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL}
     restart: always
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "6787:3000"
     depends_on:
       backend:
         condition: service_healthy
