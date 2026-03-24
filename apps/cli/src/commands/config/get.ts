@@ -6,7 +6,7 @@ export default class ConfigGet extends Command {
 
   static override examples = [
     '<%= config.bin %> config get orchestrator.url',
-    '<%= config.bin %> config get daemon.port',
+    '<%= config.bin %> config get backend.port',
   ];
 
   static override args = {

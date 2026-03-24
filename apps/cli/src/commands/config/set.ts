@@ -5,8 +5,8 @@ export default class ConfigSet extends Command {
   static override description = 'Set a configuration value';
 
   static override examples = [
-    '<%= config.bin %> config set orchestrator.url http://localhost:4000',
-    '<%= config.bin %> config set daemon.port 4001',
+    '<%= config.bin %> config set orchestrator.url http://localhost:6769',
+    '<%= config.bin %> config set backend.port 6769',
   ];
 
   static override args = {

@@ -1,12 +1,44 @@
+'use client';
+
+import Sidebar from '@/components/Sidebar';
+import Topbar from '@/components/Topbar';
+import BottomPanel from '@/components/BottomPanel';
+import VirtualOffice from '@/components/pages/VirtualOffice';
+import RoomDetail from '@/components/pages/RoomDetail';
+import TaskBoard from '@/components/pages/TaskBoard';
+import AgentsPage from '@/components/pages/AgentsPage';
+import PlaceholderPage from '@/components/pages/PlaceholderPage';
+import { useAppStore } from '@/store/useAppStore';
+
+const placeholders: Record<string, { icon: string; title: string }> = {
+  projects: { icon: '📁', title: 'Projects' },
+  workflows: { icon: '🔄', title: 'Workflows' },
+  testing: { icon: '🧪', title: 'Testing' },
+  logs: { icon: '📊', title: 'Logs' },
+  settings: { icon: '⚙️', title: 'Settings' },
+};
+
 export default function Home() {
+  const { currentPage } = useAppStore();
+
   return (
-    <div className="min-h-screen bg-[#0a0c14] text-[#e4e6f0] flex items-center justify-center">
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#6c5ce7] to-[#a29bfe] text-3xl font-extrabold text-white shadow-lg shadow-[#6c5ce7]/30 mb-6">
-          T
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Topbar />
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          {currentPage === 'office' && <VirtualOffice />}
+          {currentPage === 'detail' && <RoomDetail />}
+          {currentPage === 'tasks' && <TaskBoard />}
+          {currentPage === 'agents' && <AgentsPage />}
+          {placeholders[currentPage] && (
+            <PlaceholderPage
+              icon={placeholders[currentPage].icon}
+              title={placeholders[currentPage].title}
+            />
+          )}
         </div>
-        <h1 className="text-4xl font-bold mb-2">Tiwa</h1>
-        <p className="text-[#7b7f9e] text-lg">AI Orchestrator System</p>
+        <BottomPanel />
       </div>
     </div>
   );

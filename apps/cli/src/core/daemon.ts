@@ -1,19 +1,29 @@
-import { readFile, writeFile, rm } from 'node:fs/promises';
+import { readFile, writeFile, rm, mkdir, open } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { spawn, exec } from 'node:child_process';
 import { getTiwaDir, loadConfig } from './config.js';
-import type { DaemonState, SystemStatus } from '../types/index.js';
+import type { DaemonState, WorkerState, ServiceState, SystemStatus } from '../types/index.js';
 
 const STATE_FILE = 'state.json';
+const WORKER_STATE_FILE = 'worker-state.json';
+const LOG_DIR = 'logs';
 
 function getStatePath(): string {
   return join(getTiwaDir(), STATE_FILE);
 }
 
+function getWorkerStatePath(): string {
+  return join(getTiwaDir(), WORKER_STATE_FILE);
+}
+
+function getLogDir(): string {
+  return join(getTiwaDir(), LOG_DIR);
+}
+
 async function readState(): Promise<DaemonState | null> {
   const path = getStatePath();
   if (!existsSync(path)) return null;
-
   try {
     const raw = await readFile(path, 'utf-8');
     return JSON.parse(raw) as DaemonState;
@@ -28,9 +38,27 @@ async function writeState(state: DaemonState): Promise<void> {
 
 async function clearState(): Promise<void> {
   const path = getStatePath();
-  if (existsSync(path)) {
-    await rm(path);
+  if (existsSync(path)) await rm(path);
+}
+
+async function readWorkerState(): Promise<WorkerState | null> {
+  const path = getWorkerStatePath();
+  if (!existsSync(path)) return null;
+  try {
+    const raw = await readFile(path, 'utf-8');
+    return JSON.parse(raw) as WorkerState;
+  } catch {
+    return null;
   }
+}
+
+async function writeWorkerState(state: WorkerState): Promise<void> {
+  await writeFile(getWorkerStatePath(), JSON.stringify(state, null, 2), 'utf-8');
+}
+
+async function clearWorkerState(): Promise<void> {
+  const path = getWorkerStatePath();
+  if (existsSync(path)) await rm(path);
 }
 
 function isProcessRunning(pid: number): boolean {
@@ -42,74 +70,290 @@ function isProcessRunning(pid: number): boolean {
   }
 }
 
-export async function startDaemon(): Promise<DaemonState> {
+function findProjectRoot(): string | null {
+  let dir = resolve(import.meta.dirname ?? process.cwd(), '..');
+  for (let i = 0; i < 10; i++) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml')) || existsSync(join(dir, 'turbo.json'))) {
+      return dir;
+    }
+    dir = resolve(dir, '..');
+  }
+  return null;
+}
+
+function openBrowser(url: string): void {
+  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+  exec(`${cmd} ${url}`);
+}
+
+interface SpawnServiceOptions {
+  name: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  port: number;
+  env?: Record<string, string>;
+}
+
+async function ensureLogDir(): Promise<string> {
+  const logDir = getLogDir();
+  if (!existsSync(logDir)) {
+    await mkdir(logDir, { recursive: true });
+  }
+  return logDir;
+}
+
+async function spawnService(opts: SpawnServiceOptions, logDir: string): Promise<ServiceState> {
+  const outLogPath = join(logDir, `${opts.name}-stdout.log`);
+  const errLogPath = join(logDir, `${opts.name}-stderr.log`);
+  const outFd = await open(outLogPath, 'a');
+  const errFd = await open(errLogPath, 'a');
+
+  const child = spawn(opts.command, opts.args, {
+    cwd: opts.cwd,
+    detached: true,
+    stdio: ['ignore', outFd.fd, errFd.fd],
+    env: { ...process.env, ...opts.env },
+  });
+
+  child.unref();
+  const pid = child.pid;
+  await outFd.close();
+  await errFd.close();
+
+  if (!pid) throw new Error(`Failed to start ${opts.name}`);
+  return { pid, port: opts.port };
+}
+
+function killProcess(pid: number): void {
+  try { process.kill(-pid, 'SIGTERM'); return; } catch { /* fallback */ }
+  try { process.kill(pid, 'SIGTERM'); } catch { /* dead */ }
+}
+
+async function waitForProcessDeath(pid: number, maxWaitMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs && isProcessRunning(pid)) {
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  if (isProcessRunning(pid)) {
+    try { process.kill(pid, 'SIGKILL'); } catch { /* */ }
+  }
+}
+
+// ========== tiwa start (backend + frontend) ==========
+
+export async function startServices(): Promise<DaemonState> {
   const existing = await readState();
-  if (existing && isProcessRunning(existing.pid)) {
-    throw new Error(`Daemon already running (PID: ${existing.pid})`);
+  if (existing) {
+    const anyRunning =
+      (existing.backend && isProcessRunning(existing.backend.pid)) ||
+      (existing.frontend && isProcessRunning(existing.frontend.pid));
+    if (anyRunning) {
+      throw new Error('Tiwa services already running. Run "tiwa stop" first.');
+    }
   }
 
   const config = await loadConfig();
-  const port = config.daemon.port;
+  const logDir = await ensureLogDir();
+  const projectRoot = findProjectRoot();
+  if (!projectRoot) throw new Error('Cannot find Tiwa project root.');
 
-  // TODO: spawn actual orchestrator backend process
-  // For now, record that the daemon "started" with current process info
+  const backendDir = join(projectRoot, 'apps', 'backend');
+  const frontendDir = join(projectRoot, 'apps', 'frontend');
+
+  // Backend
+  let backendState: ServiceState | null = null;
+  const backendDist = join(backendDir, 'dist', 'main.js');
+  if (!existsSync(backendDist)) throw new Error('Backend not built. Run: pnpm --filter backend build');
+  backendState = await spawnService({
+    name: 'backend',
+    command: process.execPath,
+    args: [backendDist],
+    cwd: backendDir,
+    port: config.backend.port,
+    env: {
+      BACKEND_PORT: String(config.backend.port),
+      BACKEND_HOST: config.backend.host,
+      FRONTEND_URL: `http://localhost:${config.frontend.port}`,
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
+    },
+  }, logDir);
+
+  // Frontend
+  let frontendState: ServiceState | null = null;
+  if (existsSync(frontendDir)) {
+    const nextDir = join(frontendDir, '.next');
+    const useProduction = existsSync(nextDir);
+    frontendState = await spawnService({
+      name: 'frontend',
+      command: 'npx',
+      args: useProduction ? ['next', 'start', '-p', String(config.frontend.port)] : ['next', 'dev', '-p', String(config.frontend.port)],
+      cwd: frontendDir,
+      port: config.frontend.port,
+      env: {
+        PORT: String(config.frontend.port),
+        NEXT_PUBLIC_API_URL: `http://localhost:${config.backend.port}`,
+        NODE_ENV: useProduction ? 'production' : 'development',
+      },
+    }, logDir);
+  }
+
   const state: DaemonState = {
-    pid: process.pid,
-    port,
+    backend: backendState,
+    frontend: frontendState,
     startedAt: new Date().toISOString(),
     version: '0.1.0',
   };
 
   await writeState(state);
+
+  if (frontendState) {
+    setTimeout(() => openBrowser(`http://localhost:${config.frontend.port}`), 2000);
+  }
+
   return state;
 }
 
-export async function stopDaemon(): Promise<void> {
+export async function stopServices(): Promise<void> {
   const state = await readState();
-  if (!state) {
-    throw new Error('Daemon is not running');
-  }
+  if (!state) throw new Error('Tiwa services are not running');
 
-  if (isProcessRunning(state.pid)) {
-    try {
-      process.kill(state.pid, 'SIGTERM');
-    } catch {
-      // Process may have already exited
-    }
-  }
-
+  const pids: number[] = [];
+  if (state.backend && isProcessRunning(state.backend.pid)) { killProcess(state.backend.pid); pids.push(state.backend.pid); }
+  if (state.frontend && isProcessRunning(state.frontend.pid)) { killProcess(state.frontend.pid); pids.push(state.frontend.pid); }
+  await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
   await clearState();
 }
 
-export async function getDaemonStatus(): Promise<SystemStatus> {
-  const config = await loadConfig();
-  const state = await readState();
-  const running = state !== null && isProcessRunning(state.pid);
+// ========== tiwa worker ==========
 
-  let orchestratorConnected = false;
-  try {
-    const res = await fetch(`${config.orchestrator.url}/health`, {
-      signal: AbortSignal.timeout(3000),
-    });
-    orchestratorConnected = res.ok;
-  } catch {
-    // Not connected
+export async function startWorker(backendUrl?: string): Promise<WorkerState> {
+  const existing = await readWorkerState();
+  if (existing?.worker && isProcessRunning(existing.worker.pid)) {
+    throw new Error('Worker already running. Run "tiwa worker stop" first.');
   }
 
-  return {
-    daemon: {
-      running,
-      pid: running ? state?.pid : undefined,
-      port: running ? state?.port : undefined,
-      uptime: running && state ? Date.now() - new Date(state.startedAt).getTime() : undefined,
+  const config = await loadConfig();
+  const resolvedBackendUrl = backendUrl || config.worker.backendUrl;
+  const logDir = await ensureLogDir();
+  const projectRoot = findProjectRoot();
+  if (!projectRoot) throw new Error('Cannot find Tiwa project root.');
+
+  const workerDir = join(projectRoot, 'apps', 'worker');
+  if (!existsSync(workerDir)) throw new Error('Worker directory not found.');
+
+  const workerDist = join(workerDir, 'dist', 'main.js');
+  const useCompiled = existsSync(workerDist);
+
+  const workerState = await spawnService({
+    name: 'worker',
+    command: useCompiled ? process.execPath : 'npx',
+    args: useCompiled ? [workerDist] : ['tsx', 'src/main.ts'],
+    cwd: workerDir,
+    port: config.worker.port,
+    env: {
+      WORKER_PORT: String(config.worker.port),
+      WORKER_HOST: config.worker.host,
+      BACKEND_URL: resolvedBackendUrl,
+      HEARTBEAT_INTERVAL: String(config.worker.heartbeatInterval),
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
-    orchestrator: {
-      connected: orchestratorConnected,
-      url: config.orchestrator.url,
-    },
-    agents: {
-      total: 0,
-      active: 0,
-    },
+  }, logDir);
+
+  const state: WorkerState = {
+    worker: workerState,
+    backendUrl: resolvedBackendUrl,
+    startedAt: new Date().toISOString(),
+    version: '0.1.0',
   };
+
+  await writeWorkerState(state);
+  return state;
+}
+
+export async function stopWorker(): Promise<void> {
+  const state = await readWorkerState();
+  if (!state?.worker) throw new Error('Worker is not running');
+
+  if (isProcessRunning(state.worker.pid)) {
+    killProcess(state.worker.pid);
+    await waitForProcessDeath(state.worker.pid);
+  }
+  await clearWorkerState();
+}
+
+// ========== tiwa stop (all) ==========
+
+export async function stopAll(): Promise<void> {
+  const state = await readState();
+  const workerState = await readWorkerState();
+
+  const pids: number[] = [];
+
+  if (state?.backend && isProcessRunning(state.backend.pid)) { killProcess(state.backend.pid); pids.push(state.backend.pid); }
+  if (state?.frontend && isProcessRunning(state.frontend.pid)) { killProcess(state.frontend.pid); pids.push(state.frontend.pid); }
+  if (workerState?.worker && isProcessRunning(workerState.worker.pid)) { killProcess(workerState.worker.pid); pids.push(workerState.worker.pid); }
+
+  await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
+
+  if (state) await clearState();
+  if (workerState) await clearWorkerState();
+}
+
+// ========== Status ==========
+
+export async function getFullStatus(): Promise<SystemStatus> {
+  const config = await loadConfig();
+  const state = await readState();
+  const workerState = await readWorkerState();
+
+  const backendRunning = state?.backend ? isProcessRunning(state.backend.pid) : false;
+  const frontendRunning = state?.frontend ? isProcessRunning(state.frontend.pid) : false;
+  const workerRunning = workerState?.worker ? isProcessRunning(workerState.worker.pid) : false;
+
+  if (state && !backendRunning && !frontendRunning) await clearState();
+  if (workerState && !workerRunning) await clearWorkerState();
+
+  let orchestratorConnected = false;
+  let connectedWorkers: any[] = [];
+  try {
+    const res = await fetch(`${config.orchestrator.url}/health`, { signal: AbortSignal.timeout(3000) });
+    orchestratorConnected = res.ok;
+  } catch { /* */ }
+
+  // Try to get connected workers from backend
+  try {
+    const res = await fetch(`${config.orchestrator.url}/api/workers`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) connectedWorkers = await res.json();
+  } catch { /* */ }
+
+  const uptime = state && (backendRunning || frontendRunning)
+    ? Date.now() - new Date(state.startedAt).getTime()
+    : undefined;
+
+  return {
+    backend: { running: backendRunning, pid: backendRunning ? state?.backend?.pid : undefined, port: backendRunning ? state?.backend?.port : config.backend.port },
+    frontend: { running: frontendRunning, pid: frontendRunning ? state?.frontend?.pid : undefined, port: frontendRunning ? state?.frontend?.port : config.frontend.port },
+    worker: { running: workerRunning, pid: workerRunning ? workerState?.worker?.pid : undefined, port: workerRunning ? workerState?.worker?.port : config.worker.port },
+    orchestrator: { connected: orchestratorConnected, url: config.orchestrator.url },
+    connectedWorkers,
+    uptime,
+    agents: { total: 0, active: 0 },
+  };
+}
+
+export async function getDaemonLogs(service = 'backend', lines = 50): Promise<string> {
+  const logDir = getLogDir();
+  const outLog = join(logDir, `${service}-stdout.log`);
+  const errLog = join(logDir, `${service}-stderr.log`);
+  let output = '';
+  if (existsSync(outLog)) {
+    const content = await readFile(outLog, 'utf-8');
+    output += `=== ${service} stdout ===\n${content.split('\n').slice(-lines).join('\n')}\n`;
+  }
+  if (existsSync(errLog)) {
+    const content = await readFile(errLog, 'utf-8');
+    output += `=== ${service} stderr ===\n${content.split('\n').slice(-lines).join('\n')}\n`;
+  }
+  return output || `No logs found for ${service}`;
 }

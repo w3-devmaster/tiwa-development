@@ -30,9 +30,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
+  const host = config.get('BACKEND_HOST', '0.0.0.0');
   const port = config.get('BACKEND_PORT', 4000);
-  await app.listen(port);
-  console.log(`Tiwa Backend running on http://localhost:${port}`);
+  await app.listen(port, host);
+  console.log(`Tiwa Backend running on http://${host}:${port}`);
   console.log(`Swagger docs at http://localhost:${port}/api/docs`);
 }
 
