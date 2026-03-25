@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Enums ===
+
+enum AgentRole {
+  planner
+  backend
+  frontend
+  qa
+  devops
+  reviewer
+}
+
+enum AgentStatus {
+  idle
+  busy
+  working
+  thinking
+  error
+  offline
+}
+
+enum TaskType {
+  code
+  test
+  review
+  deploy
+  plan
+  fix
+}
+
+enum TaskStatus {
+  pending
+  queued
+  in_progress
+  review
+  completed
+  failed
+  cancelled
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum ProjectStatus {
+  active
+  archived
+  paused
+}
+
+enum WorkflowStatus {
+  pending
+  running
+  paused
+  completed
+  failed
+  cancelled
+}
+
+// === Models ===
+
+model Agent {
+  id            String      @id @default(cuid())
+  name          String
+  role          String      @default("backend")
+  status        String      @default("idle")
+  model         String      @default("claude-sonnet-4-20250514")
+  department    String      @default("backend")
+  task          String?
+  displayConfig Json        @default("{}")
+  stats         Json        @default("{}")
+  configJson    Json        @default("{}")
+  lastActiveAt  DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  tasks         Task[]
+
+  @@map("agents")
+}
+
+model Task {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  type            String    @default("code")
+  status          String    @default("pending")
+  priority        String    @default("medium")
+  assignedAgentId String?
+  assignedAgent   Agent?    @relation(fields: [assignedAgentId], references: [id])
+  projectId       String?
+  project         Project?  @relation(fields: [projectId], references: [id])
+  workflowId      String?
+  workflow        Workflow? @relation(fields: [workflowId], references: [id])
+  parentTaskId    String?
+  branch          String?
+  retryCount      Int       @default(0)
+  maxRetries      Int       @default(3)
+  resultJson      Json?
+  error           String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("tasks")
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  description   String?
+  status        String   @default("active")
+  gitRepoJson   Json     @default("{}")
+  workspacePath String?
+  metadataJson  Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tasks         Task[]
+  workflows     Workflow[]
+
+  @@map("projects")
+}
+
+model Workflow {
+  id               String    @id @default(cuid())
+  name             String
+  description      String?
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id])
+  status           String    @default("pending")
+  stepsJson        Json      @default("[]")
+  currentStepIndex Int       @default(0)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  tasks            Task[]
+
+  @@map("workflows")
+}

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { logEntries } from '@/data/mockData';
+import { useLiveLogs } from '@/hooks/useLogs';
 
 const deptColors: Record<string, string> = {
   be: 'text-[#74b9ff]',
@@ -9,53 +9,27 @@ const deptColors: Record<string, string> = {
   dv: 'text-[#6c5ce7]',
 };
 
+const tabs = [
+  { label: 'All', dept: 'all' },
+  { label: 'Backend', dept: 'backend' },
+  { label: 'Frontend', dept: 'frontend' },
+  { label: 'QA', dept: 'qa' },
+  { label: 'DevOps', dept: 'devops' },
+];
+
 export default function BottomPanel() {
-  const [logs, setLogs] = useState<{ time: string; agent: string; dept: string; message: string }[]>([]);
   const [open, setOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
   const logRef = useRef<HTMLDivElement>(null);
-  const idxRef = useRef(0);
+  const { filterByDept } = useLiveLogs();
 
-  useEffect(() => {
-    // Initial logs
-    const initial = [];
-    for (let i = 0; i < 6; i++) {
-      const entry = logEntries[i % logEntries.length];
-      initial.push({
-        time: new Date().toTimeString().slice(0, 8),
-        agent: entry.agent,
-        dept: entry.dept,
-        message: entry.message,
-      });
-    }
-    setLogs(initial);
-    idxRef.current = 6;
-
-    const interval = setInterval(() => {
-      const entry = logEntries[idxRef.current % logEntries.length];
-      setLogs((prev) => {
-        const next = [
-          ...prev,
-          {
-            time: new Date().toTimeString().slice(0, 8),
-            agent: entry.agent,
-            dept: entry.dept,
-            message: entry.message,
-          },
-        ];
-        if (next.length > 40) return next.slice(-40);
-        return next;
-      });
-      idxRef.current++;
-    }, 3500);
-
-    return () => clearInterval(interval);
-  }, []);
+  const filteredLogs = filterByDept(activeTab);
 
   useEffect(() => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [filteredLogs]);
 
   return (
     <div className="bg-[#181c2e] border-t border-[#2a2e45]">
@@ -68,23 +42,27 @@ export default function BottomPanel() {
           Live Activity Feed
         </div>
         <div className="flex gap-1">
-          {['All', 'Backend', 'Frontend', 'QA', 'DevOps'].map((tab, i) => (
+          {tabs.map((tab) => (
             <span
-              key={tab}
+              key={tab.dept}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTab(tab.dept);
+              }}
               className={`px-2.5 py-[3px] rounded-[10px] text-[10px] cursor-pointer transition-colors ${
-                i === 0 ? 'bg-[#6c5ce7] text-white' : 'text-[#7b7f9e]'
+                activeTab === tab.dept ? 'bg-[#6c5ce7] text-white' : 'text-[#7b7f9e]'
               }`}
             >
-              {tab}
+              {tab.label}
             </span>
           ))}
         </div>
       </div>
       {open && (
         <div ref={logRef} className="h-[120px] overflow-y-auto px-5 py-1.5 font-mono text-[11px] leading-[1.9]">
-          {logs.map((log, i) => (
+          {filteredLogs.map((log, i) => (
             <div key={i} className="flex gap-2.5">
-              <span className="text-[#555878] min-w-[60px]">{log.time}</span>
+              <span className="text-[#555878] min-w-[60px]">{new Date().toTimeString().slice(0, 8)}</span>
               <span className={`min-w-[80px] font-semibold ${deptColors[log.dept] || 'text-[#7b7f9e]'}`}>
                 {log.agent}
               </span>

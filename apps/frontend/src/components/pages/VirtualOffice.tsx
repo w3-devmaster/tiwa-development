@@ -2,11 +2,12 @@
 import StatsStrip from '@/components/office/StatsStrip';
 import WorkflowPipeline from '@/components/office/WorkflowPipeline';
 import Room from '@/components/office/Room';
-import { rooms } from '@/data/mockData';
+import { useRooms } from '@/hooks/useAgents';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function VirtualOffice() {
   const { setPage, setSelectedRoom } = useAppStore();
+  const { data: rooms, isLoading } = useRooms();
 
   return (
     <div className="w-full min-h-full p-6" style={{
@@ -14,18 +15,26 @@ export default function VirtualOffice() {
     }}>
       <StatsStrip />
       <WorkflowPipeline />
-      <div className="grid grid-cols-2 gap-5">
-        {rooms.map((room) => (
-          <Room
-            key={room.id}
-            room={room}
-            onClick={() => {
-              setSelectedRoom(room.id);
-              setPage('detail');
-            }}
-          />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-5">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-48 bg-[#181c2e] border border-[#2a2e45] rounded-[14px] animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-5">
+          {(rooms ?? []).map((room) => (
+            <Room
+              key={room.id}
+              room={room}
+              onClick={() => {
+                setSelectedRoom(room.id);
+                setPage('detail');
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,34 +1,43 @@
 'use client';
 import { useAppStore, type PageId } from '@/store/useAppStore';
-
-const navSections = [
-  {
-    title: 'Monitor',
-    items: [
-      { id: 'office' as PageId, icon: '🏢', label: 'Virtual Office', badge: 'Live', badgeClass: 'bg-[#00b894]' },
-      { id: 'tasks' as PageId, icon: '📋', label: 'Task Board', badge: '12', badgeClass: 'bg-[#6c5ce7]' },
-      { id: 'agents' as PageId, icon: '🤖', label: 'AI Agents', badge: '8', badgeClass: 'bg-[#6c5ce7]' },
-    ],
-  },
-  {
-    title: 'Workspace',
-    items: [
-      { id: 'projects' as PageId, icon: '📁', label: 'Projects' },
-      { id: 'workflows' as PageId, icon: '🔄', label: 'Workflows' },
-      { id: 'testing' as PageId, icon: '🧪', label: 'Testing', badge: '2', badgeClass: 'bg-[#e17055]' },
-    ],
-  },
-  {
-    title: 'System',
-    items: [
-      { id: 'logs' as PageId, icon: '📊', label: 'Logs' },
-      { id: 'settings' as PageId, icon: '⚙️', label: 'Settings' },
-    ],
-  },
-];
+import { useStats } from '@/hooks/useStats';
+import { useAgents } from '@/hooks/useAgents';
 
 export default function Sidebar() {
-  const { currentPage, setPage } = useAppStore();
+  const { currentPage, setPage, connectionStatus } = useAppStore();
+  const { data: stats } = useStats();
+  const { data: agents } = useAgents();
+
+  const agentCount = agents?.length ?? 8;
+  const taskCount = stats?.totalTasks ?? 12;
+  const errorCount = stats?.errors ?? 2;
+  const isLive = connectionStatus === 'connected';
+
+  const navSections = [
+    {
+      title: 'Monitor',
+      items: [
+        { id: 'office' as PageId, icon: '🏢', label: 'Virtual Office', badge: isLive ? 'Live' : undefined, badgeClass: 'bg-[#00b894]' },
+        { id: 'tasks' as PageId, icon: '📋', label: 'Task Board', badge: String(taskCount), badgeClass: 'bg-[#6c5ce7]' },
+        { id: 'agents' as PageId, icon: '🤖', label: 'AI Agents', badge: String(agentCount), badgeClass: 'bg-[#6c5ce7]' },
+      ],
+    },
+    {
+      title: 'Workspace',
+      items: [
+        { id: 'projects' as PageId, icon: '📁', label: 'Projects' },
+        { id: 'workflows' as PageId, icon: '🔄', label: 'Workflows' },
+        { id: 'testing' as PageId, icon: '🧪', label: 'Testing', badge: errorCount ? String(errorCount) : undefined, badgeClass: 'bg-[#e17055]' },
+      ],
+    },
+    {
+      title: 'System',
+      items: [
+        { id: 'logs' as PageId, icon: '📊', label: 'Logs' },
+        { id: 'settings' as PageId, icon: '⚙️', label: 'Settings' },
+      ],
+    },
+  ];
 
   return (
     <aside className="w-[250px] min-w-[250px] bg-[#111422] border-r border-[#2a2e45] flex flex-col z-[100]">

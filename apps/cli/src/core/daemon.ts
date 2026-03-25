@@ -81,6 +81,29 @@ function findProjectRoot(): string | null {
   return null;
 }
 
+function execPromise(cmd: string, opts: { cwd: string }): Promise<void> {
+  return new Promise((resolve, reject) => {
+    exec(cmd, { cwd: opts.cwd, maxBuffer: 10 * 1024 * 1024 }, (err) => {
+      if (err) reject(new Error(`Build failed: ${err.message}`));
+      else resolve();
+    });
+  });
+}
+
+export async function buildServices(log?: (msg: string) => void): Promise<void> {
+  const projectRoot = findProjectRoot();
+  if (!projectRoot) throw new Error('Cannot find Tiwa project root.');
+  log?.('Building backend + frontend...');
+  await execPromise('pnpm turbo build --filter=backend --filter=frontend', { cwd: projectRoot });
+}
+
+export async function buildWorker(log?: (msg: string) => void): Promise<void> {
+  const projectRoot = findProjectRoot();
+  if (!projectRoot) throw new Error('Cannot find Tiwa project root.');
+  log?.('Building worker...');
+  await execPromise('pnpm turbo build --filter=worker', { cwd: projectRoot });
+}
+
 function openBrowser(url: string): void {
   const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
   exec(`${cmd} ${url}`);
@@ -164,7 +187,6 @@ export async function startServices(): Promise<DaemonState> {
   // Backend
   let backendState: ServiceState | null = null;
   const backendDist = join(backendDir, 'dist', 'main.js');
-  if (!existsSync(backendDist)) throw new Error('Backend not built. Run: pnpm --filter backend build');
   backendState = await spawnService({
     name: 'backend',
     command: process.execPath,
@@ -298,6 +320,20 @@ export async function stopAll(): Promise<void> {
 
   if (state) await clearState();
   if (workerState) await clearWorkerState();
+}
+
+// ========== Restart ==========
+
+export async function restartServices(log?: (msg: string) => void): Promise<DaemonState> {
+  try { await stopServices(); } catch { /* not running */ }
+  await buildServices(log);
+  return startServices();
+}
+
+export async function restartWorker(backendUrl?: string, log?: (msg: string) => void): Promise<WorkerState> {
+  try { await stopWorker(); } catch { /* not running */ }
+  await buildWorker(log);
+  return startWorker(backendUrl);
 }
 
 // ========== Status ==========

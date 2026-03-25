@@ -1,5 +1,5 @@
 import { Command } from '@oclif/core';
-import { startServices } from '../core/daemon.js';
+import { buildServices, startServices } from '../core/daemon.js';
 
 export default class Start extends Command {
   static override description = 'Start Tiwa backend + frontend services';
@@ -9,6 +9,10 @@ export default class Start extends Command {
   async run(): Promise<void> {
     await this.parse(Start);
     try {
+      this.log('📦 Building services...');
+      await buildServices((msg) => this.log(`  ${msg}`));
+      this.log('  ✅ Build complete\n');
+
       this.log('🚀 Starting Tiwa services...\n');
       const state = await startServices();
 

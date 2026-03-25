@@ -1,7 +1,9 @@
 'use client';
-import { agents } from '@/data/mockData';
+import { useAgents } from '@/hooks/useAgents';
 
 export default function AgentsPage() {
+  const { data: agents, isLoading } = useAgents();
+
   return (
     <div>
       <div className="flex justify-between items-center mb-[18px] px-6 pt-6">
@@ -10,8 +12,15 @@ export default function AgentsPage() {
           + Add Agent
         </button>
       </div>
+      {isLoading ? (
+        <div className="grid grid-cols-4 gap-3.5 px-6 pb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-52 bg-[#181c2e] border border-[#2a2e45] rounded-[14px] animate-pulse" />
+          ))}
+        </div>
+      ) : (
       <div className="grid grid-cols-4 gap-3.5 px-6 pb-6">
-        {agents.map((agent) => (
+        {(agents ?? []).map((agent) => (
           <div key={agent.id} className="bg-[#181c2e] border border-[#2a2e45] rounded-[14px] p-[18px] text-center transition-all duration-300 cursor-pointer hover:border-[#6c5ce7] hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(0,0,0,.3)]">
             <div className="w-14 h-14 rounded-[14px] mx-auto mb-2.5 flex items-center justify-center text-2xl font-bold text-white" style={{ background: agent.avatar.bg }}>
               {agent.avatar.letter}
@@ -34,6 +43,7 @@ export default function AgentsPage() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

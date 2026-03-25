@@ -1,5 +1,5 @@
 import { Args, Command, Flags } from '@oclif/core';
-import { startWorker, stopWorker } from '../core/daemon.js';
+import { buildWorker, startWorker, stopWorker, restartWorker } from '../core/daemon.js';
 
 export default class Worker extends Command {
   static override description = 'Start/stop Tiwa worker';
@@ -13,9 +13,9 @@ export default class Worker extends Command {
 
   static override args = {
     action: Args.string({
-      description: 'Action: start (default), stop, status',
+      description: 'Action: start (default), stop, status, restart',
       default: 'start',
-      options: ['start', 'stop', 'status'],
+      options: ['start', 'stop', 'status', 'restart'],
     }),
   };
 
@@ -55,8 +55,29 @@ export default class Worker extends Command {
       return;
     }
 
+    if (args.action === 'restart') {
+      try {
+        this.log('🔄 Restarting Tiwa worker...\n');
+        const state = await restartWorker(flags.backend, (msg) => this.log(`  ${msg}`));
+        this.log('  ✅ Build complete\n');
+        if (state.worker) {
+          this.log(`  ✅ Worker    PID: ${state.worker.pid}  Port: ${state.worker.port}  (0.0.0.0)`);
+        }
+        this.log(`  🔗 Backend:  ${state.backendUrl}`);
+        this.log(`  💓 Heartbeat: every 3s`);
+        this.log(`  📁 Logs: ~/.tiwa/logs/`);
+      } catch (error) {
+        this.error(error instanceof Error ? error.message : 'Failed to restart worker');
+      }
+      return;
+    }
+
     // Default: start
     try {
+      this.log('📦 Building worker...');
+      await buildWorker((msg) => this.log(`  ${msg}`));
+      this.log('  ✅ Build complete\n');
+
       this.log('🔧 Starting Tiwa worker...\n');
       const state = await startWorker(flags.backend);
 
