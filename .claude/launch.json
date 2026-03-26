@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "dev", "--port", "6768"],
+      "port": 6768,
+      "autoPort": false,
+      "cwd": "apps/frontend"
+    }
+  ]
+}

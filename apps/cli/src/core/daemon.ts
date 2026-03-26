@@ -163,20 +163,27 @@ async function waitForProcessDeath(pid: number, maxWaitMs = 5000): Promise<void>
   }
 }
 
+async function killPort(port: number): Promise<void> {
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'win32'
+      ? `for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port}') do taskkill /PID %a /F`
+      : `lsof -ti :${port} | xargs kill -9 2>/dev/null`;
+    exec(cmd, () => resolve());
+  });
+}
+
 // ========== tiwa start (backend + frontend) ==========
 
 export async function startServices(): Promise<DaemonState> {
-  const existing = await readState();
-  if (existing) {
-    const anyRunning =
-      (existing.backend && isProcessRunning(existing.backend.pid)) ||
-      (existing.frontend && isProcessRunning(existing.frontend.pid));
-    if (anyRunning) {
-      throw new Error('Tiwa services already running. Run "tiwa stop" first.');
-    }
-  }
-
   const config = await loadConfig();
+
+  // Force-kill ports before start (guarantee clean state)
+  await killPort(config.backend.port);
+  await killPort(config.frontend.port);
+  await clearState();
+
+  // Wait briefly for ports to be released
+  await new Promise((r) => setTimeout(r, 500));
   const logDir = await ensureLogDir();
   const projectRoot = findProjectRoot();
   if (!projectRoot) throw new Error('Cannot find Tiwa project root.');
@@ -245,24 +252,30 @@ export async function startServices(): Promise<DaemonState> {
 
 export async function stopServices(): Promise<void> {
   const state = await readState();
-  if (!state) throw new Error('Tiwa services are not running');
+  const config = await loadConfig();
 
+  // 1. Kill by PID (if state exists)
   const pids: number[] = [];
-  if (state.backend && isProcessRunning(state.backend.pid)) { killProcess(state.backend.pid); pids.push(state.backend.pid); }
-  if (state.frontend && isProcessRunning(state.frontend.pid)) { killProcess(state.frontend.pid); pids.push(state.frontend.pid); }
-  await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
+  if (state?.backend && isProcessRunning(state.backend.pid)) { killProcess(state.backend.pid); pids.push(state.backend.pid); }
+  if (state?.frontend && isProcessRunning(state.frontend.pid)) { killProcess(state.frontend.pid); pids.push(state.frontend.pid); }
+  if (pids.length) await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
+
+  // 2. Kill by port (guarantee — handles orphan processes)
+  await killPort(config.backend.port);
+  await killPort(config.frontend.port);
+
   await clearState();
 }
 
 // ========== tiwa worker ==========
 
 export async function startWorker(backendUrl?: string): Promise<WorkerState> {
-  const existing = await readWorkerState();
-  if (existing?.worker && isProcessRunning(existing.worker.pid)) {
-    throw new Error('Worker already running. Run "tiwa worker stop" first.');
-  }
-
   const config = await loadConfig();
+
+  // Force-kill port before start (guarantee clean state)
+  await killPort(config.worker.port);
+  await clearWorkerState();
+  await new Promise((r) => setTimeout(r, 500));
   const resolvedBackendUrl = backendUrl || config.worker.backendUrl;
   const logDir = await ensureLogDir();
   const projectRoot = findProjectRoot();
@@ -305,12 +318,17 @@ export async function startWorker(backendUrl?: string): Promise<WorkerState> {
 
 export async function stopWorker(): Promise<void> {
   const state = await readWorkerState();
-  if (!state?.worker) throw new Error('Worker is not running');
+  const config = await loadConfig();
 
-  if (isProcessRunning(state.worker.pid)) {
+  // 1. Kill by PID
+  if (state?.worker && isProcessRunning(state.worker.pid)) {
     killProcess(state.worker.pid);
     await waitForProcessDeath(state.worker.pid);
   }
+
+  // 2. Kill by port (guarantee)
+  await killPort(config.worker.port);
+
   await clearWorkerState();
 }
 
@@ -319,14 +337,21 @@ export async function stopWorker(): Promise<void> {
 export async function stopAll(): Promise<void> {
   const state = await readState();
   const workerState = await readWorkerState();
+  const config = await loadConfig();
 
+  // 1. Kill by PID
   const pids: number[] = [];
-
   if (state?.backend && isProcessRunning(state.backend.pid)) { killProcess(state.backend.pid); pids.push(state.backend.pid); }
   if (state?.frontend && isProcessRunning(state.frontend.pid)) { killProcess(state.frontend.pid); pids.push(state.frontend.pid); }
   if (workerState?.worker && isProcessRunning(workerState.worker.pid)) { killProcess(workerState.worker.pid); pids.push(workerState.worker.pid); }
+  if (pids.length) await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
 
-  await Promise.all(pids.map((pid) => waitForProcessDeath(pid)));
+  // 2. Kill by port (guarantee — handles orphan processes)
+  await Promise.all([
+    killPort(config.backend.port),
+    killPort(config.frontend.port),
+    killPort(config.worker.port),
+  ]);
 
   if (state) await clearState();
   if (workerState) await clearWorkerState();

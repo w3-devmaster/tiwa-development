@@ -1,4 +1,5 @@
 'use client';
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAgents, createAgent, updateAgent, deleteAgent } from '@/lib/api';
 import { agentToAgentData, agentsToRooms } from '@/lib/adapters';
@@ -20,16 +21,15 @@ export function useAgents() {
 
 export function useRooms() {
   const useMock = useAppStore((s) => s.useMockData);
-  const { data: agents } = useAgents();
-  return useQuery({
-    queryKey: ['rooms'],
-    queryFn: async () => {
-      if (useMock) return mockRooms;
-      if (!agents) return [];
-      return agentsToRooms(agents);
-    },
-    enabled: !!agents,
-  });
+  const { data: agents, isLoading } = useAgents();
+
+  const rooms = useMemo(() => {
+    if (useMock) return mockRooms;
+    if (!agents) return undefined;
+    return agentsToRooms(agents);
+  }, [useMock, agents]);
+
+  return { data: rooms, isLoading };
 }
 
 export function useAgentMutations() {
