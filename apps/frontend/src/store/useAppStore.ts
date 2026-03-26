@@ -1,7 +1,7 @@
 'use client';
 import { create } from 'zustand';
 
-export type PageId = 'office' | 'detail' | 'tasks' | 'agents' | 'projects' | 'workflows' | 'testing' | 'logs' | 'settings';
+export type PageId = 'office' | 'detail' | 'tasks' | 'agents' | 'departments' | 'projects' | 'workflows' | 'testing' | 'logs' | 'settings';
 
 interface AppState {
   currentPage: PageId;
@@ -34,6 +34,7 @@ export const pageNames: Record<PageId, string> = {
   detail: 'Room Detail',
   tasks: 'Task Board',
   agents: 'AI Agents',
+  departments: 'Departments',
   projects: 'Projects',
   workflows: 'Workflows',
   testing: 'Testing',

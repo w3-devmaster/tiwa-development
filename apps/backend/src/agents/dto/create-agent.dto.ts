@@ -1,10 +1,10 @@
-import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsObject } from 'class-validator';
 
 export class CreateAgentDto {
   @IsString()
   name: string;
 
-  @IsEnum(['planner', 'backend', 'frontend', 'qa', 'devops', 'reviewer'])
+  @IsString()
   role: string;
 
   @IsOptional()

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsObject } from 'class-validator';
 
 export class UpdateAgentDto {
   @IsOptional()
@@ -6,7 +6,7 @@ export class UpdateAgentDto {
   name?: string;
 
   @IsOptional()
-  @IsEnum(['planner', 'backend', 'frontend', 'qa', 'devops', 'reviewer'])
+  @IsString()
   role?: string;
 
   @IsOptional()
@@ -22,7 +22,7 @@ export class UpdateAgentDto {
   task?: string;
 
   @IsOptional()
-  @IsEnum(['idle', 'busy', 'working', 'thinking', 'error', 'offline'])
+  @IsString()
   status?: string;
 
   @IsOptional()

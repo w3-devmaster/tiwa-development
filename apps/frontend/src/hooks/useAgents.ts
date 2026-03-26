@@ -1,7 +1,7 @@
 'use client';
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getAgents, createAgent, updateAgent, deleteAgent } from '@/lib/api';
+import { getAgents, createAgent, updateAgent, deleteAgent, testAgentChat } from '@/lib/api';
 import { agentToAgentData, agentsToRooms } from '@/lib/adapters';
 import { agents as mockAgents, rooms as mockRooms } from '@/data/mockData';
 import { useAppStore } from '@/store/useAppStore';
@@ -47,4 +47,11 @@ export function useAgentMutations() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   });
   return { create, update, remove };
+}
+
+export function useTestAgent() {
+  return useMutation({
+    mutationFn: (data: { provider: string; model: string; systemPrompt: string; testMessage?: string }) =>
+      testAgentChat(data),
+  });
 }

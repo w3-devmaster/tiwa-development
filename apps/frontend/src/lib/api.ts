@@ -26,6 +26,28 @@ export const getAgentStats = () =>
     '/api/agents/stats',
   );
 
+// Departments
+export const getDepartments = () => fetchApi<any[]>('/api/departments');
+export const getDepartment = (id: string) => fetchApi<any>(`/api/departments/${id}`);
+export const createDepartment = (data: any) =>
+  fetchApi<any>('/api/departments', { method: 'POST', body: JSON.stringify(data) });
+export const updateDepartment = (id: string, data: any) =>
+  fetchApi<any>(`/api/departments/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const deleteDepartment = (id: string) =>
+  fetchApi<any>(`/api/departments/${id}`, { method: 'DELETE' });
+
+// Test Agent
+export const testAgentChat = (data: {
+  provider: string;
+  model: string;
+  systemPrompt: string;
+  testMessage?: string;
+}) =>
+  fetchApi<{ success: boolean; response?: string; error?: string; model?: string; provider?: string; usage?: any }>(
+    '/api/orchestrator/test-agent',
+    { method: 'POST', body: JSON.stringify(data) },
+  );
+
 // Tasks
 export const getTasks = (filters?: Record<string, string>) => {
   const params = filters ? '?' + new URLSearchParams(filters).toString() : '';

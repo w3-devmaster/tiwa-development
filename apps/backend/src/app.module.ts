@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { EventsModule } from './events/events.module';
 import { WorkersModule } from './workers/workers.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { AgentsModule } from './agents/agents.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -26,6 +27,7 @@ import { QueueModule } from './queue/queue.module';
     SettingsModule,
     AiProviderModule,
     WorkersModule,
+    DepartmentsModule,
     AgentsModule,
     TasksModule,
     ProjectsModule,

@@ -8,6 +8,7 @@ import RoomDetail from '@/components/pages/RoomDetail';
 import TaskBoard from '@/components/pages/TaskBoard';
 import TaskDetail from '@/components/pages/TaskDetail';
 import AgentsPage from '@/components/pages/AgentsPage';
+import DepartmentsPage from '@/components/pages/DepartmentsPage';
 import SettingsPage from '@/components/pages/SettingsPage';
 import PlaceholderPage from '@/components/pages/PlaceholderPage';
 import { useAppStore } from '@/store/useAppStore';
@@ -34,6 +35,7 @@ export default function Home() {
             selectedTaskId ? <TaskDetail /> : <TaskBoard />
           )}
           {currentPage === 'agents' && <AgentsPage />}
+          {currentPage === 'departments' && <DepartmentsPage />}
           {currentPage === 'settings' && <SettingsPage />}
           {placeholders[currentPage] && (
             <PlaceholderPage

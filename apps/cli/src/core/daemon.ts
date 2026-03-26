@@ -172,6 +172,30 @@ async function killPort(port: number): Promise<void> {
   });
 }
 
+async function isPortOccupied(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'win32'
+      ? `netstat -aon | findstr :${port}`
+      : `lsof -ti :${port}`;
+    exec(cmd, (err, stdout) => {
+      resolve(!err && stdout.trim().length > 0);
+    });
+  });
+}
+
+async function verifyPortFree(port: number, maxRetries = 5): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    const occupied = await isPortOccupied(port);
+    if (!occupied) return;
+    await killPort(port);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  const stillOccupied = await isPortOccupied(port);
+  if (stillOccupied) {
+    throw new Error(`Port ${port} is still occupied after ${maxRetries} kill attempts. Please close the process manually.`);
+  }
+}
+
 // ========== tiwa start (backend + frontend) ==========
 
 export async function startServices(): Promise<DaemonState> {
@@ -264,6 +288,10 @@ export async function stopServices(): Promise<void> {
   await killPort(config.backend.port);
   await killPort(config.frontend.port);
 
+  // 3. Verify ports are actually free
+  await verifyPortFree(config.backend.port);
+  await verifyPortFree(config.frontend.port);
+
   await clearState();
 }
 
@@ -329,6 +357,9 @@ export async function stopWorker(): Promise<void> {
   // 2. Kill by port (guarantee)
   await killPort(config.worker.port);
 
+  // 3. Verify port is actually free
+  await verifyPortFree(config.worker.port);
+
   await clearWorkerState();
 }
 
@@ -353,8 +384,14 @@ export async function stopAll(): Promise<void> {
     killPort(config.worker.port),
   ]);
 
-  if (state) await clearState();
-  if (workerState) await clearWorkerState();
+  // 3. Verify ALL ports are actually free
+  await verifyPortFree(config.backend.port);
+  await verifyPortFree(config.frontend.port);
+  await verifyPortFree(config.worker.port);
+
+  // 4. Always clear state (unconditional)
+  await clearState();
+  await clearWorkerState();
 }
 
 // ========== Restart ==========

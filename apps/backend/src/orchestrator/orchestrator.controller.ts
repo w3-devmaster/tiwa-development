@@ -11,6 +11,7 @@ import { OrchestratorService } from './orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { InProcessQueueService } from '../queue/in-process-queue.service';
+import { AiProviderService } from '../ai-provider/ai-provider.service';
 import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
 
 class SubmitTaskDto {
@@ -63,6 +64,21 @@ class WorkerResultDto {
   durationMs?: number;
 }
 
+class TestAgentDto {
+  @IsString()
+  provider: string;
+
+  @IsString()
+  model: string;
+
+  @IsString()
+  systemPrompt: string;
+
+  @IsString()
+  @IsOptional()
+  testMessage?: string;
+}
+
 @Controller('api/orchestrator')
 export class OrchestratorController {
   private readonly logger = new Logger(OrchestratorController.name);
@@ -72,6 +88,7 @@ export class OrchestratorController {
     private prisma: PrismaService,
     private events: EventsGateway,
     private inProcessQueue: InProcessQueueService,
+    private aiProvider: AiProviderService,
   ) {}
 
   @Post('submit')
@@ -117,6 +134,39 @@ export class OrchestratorController {
       provider: dto.provider || 'unknown',
       durationMs: dto.durationMs || 0,
     });
+  }
+
+  @Post('test-agent')
+  @HttpCode(200)
+  async testAgent(@Body() dto: TestAgentDto) {
+    this.logger.log(`Testing agent: provider=${dto.provider}, model=${dto.model}`);
+    const message = dto.testMessage || 'สวัสดี แนะนำตัวเองหน่อย';
+
+    try {
+      await this.aiProvider.reinitialize();
+      const response = await this.aiProvider.chat({
+        model: dto.model,
+        systemPrompt: dto.systemPrompt,
+        messages: [{ role: 'user', content: message }],
+        maxTokens: 1024,
+      });
+
+      return {
+        success: true,
+        response: response.content,
+        model: response.model,
+        provider: response.provider,
+        usage: response.usage,
+      };
+    } catch (error: any) {
+      this.logger.error(`Test agent failed: ${error.message}`);
+      return {
+        success: false,
+        error: error.message || 'Unknown error occurred',
+        provider: dto.provider,
+        model: dto.model,
+      };
+    }
   }
 
   @Get('status')

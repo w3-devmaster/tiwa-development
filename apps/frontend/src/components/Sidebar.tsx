@@ -25,6 +25,7 @@ export default function Sidebar() {
     {
       title: 'Workspace',
       items: [
+        { id: 'departments' as PageId, icon: '🏛️', label: 'Departments' },
         { id: 'projects' as PageId, icon: '📁', label: 'Projects' },
         { id: 'workflows' as PageId, icon: '🔄', label: 'Workflows' },
         { id: 'testing' as PageId, icon: '🧪', label: 'Testing', badge: errorCount ? String(errorCount) : undefined, badgeClass: 'bg-[#e17055]' },
