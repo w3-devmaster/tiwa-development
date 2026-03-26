@@ -7,997 +7,800 @@
 
 ## สารบัญ
 
-1. [Monorepo คืออะไร](#1-monorepo-คืออะไร)
+1. [Monorepo Structure](#1-monorepo-structure)
 2. [ภาพรวม Structure](#2-ภาพรวม-structure)
 3. [Root Config Files](#3-root-config-files)
 4. [packages/shared — Shared Package](#4-packagesshared--shared-package)
 5. [apps/backend — NestJS API](#5-appsbackend--nestjs-api)
-6. [apps/worker — BullMQ Worker](#6-appsworker--bullmq-worker)
-7. [apps/frontend — Next.js Dashboard](#7-appsfrontend--nextjs-dashboard)
-8. [Docker Infrastructure](#8-docker-infrastructure)
-9. [Data Flow — ข้อมูลไหลอย่างไร](#9-data-flow--ข้อมูลไหลอย่างไร)
-10. [Development Workflow](#10-development-workflow)
+6. [apps/frontend — Next.js Dashboard](#6-appsfrontend--nextjs-dashboard)
+7. [apps/worker — Worker Process](#7-appsworker--worker-process)
+8. [apps/cli — CLI Tool](#8-appscli--cli-tool)
+9. [Database & Storage](#9-database--storage)
+10. [Data Flow — ข้อมูลไหลอย่างไร](#10-data-flow--ข้อมูลไหลอย่างไร)
+11. [AI Provider System](#11-ai-provider-system)
+12. [Development Workflow](#12-development-workflow)
 
 ---
 
-## 1. Monorepo คืออะไร
+## 1. Monorepo Structure
 
-### แบบเดิม (Multi-repo)
-
-โดยปกติ ถ้าเรามีโปรเจกต์ที่ประกอบด้วย frontend, backend, worker
-เราอาจแยกเป็น 3 repo:
-
-```
-tiwa-backend/    ← repo แยก
-tiwa-frontend/   ← repo แยก
-tiwa-worker/     ← repo แยก
-```
-
-ปัญหาคือ:
-- ถ้า backend เปลี่ยน type ของ API response → ต้องไปแก้ frontend อีก repo
-- ถ้ามี shared types → ต้อง publish npm package แยก แล้ว install ใน 3 repo
-- ต้อง sync version กัน 3 ที่
-- PR ที่กระทบหลาย service ต้องเปิดหลาย repo
-
-### แบบ Monorepo
-
-รวมทุกอย่างไว้ใน repo เดียว แต่แยก package ชัดเจน:
+Tiwa ใช้ **pnpm workspaces + Turborepo** จัดการ monorepo
 
 ```
 tiwa/
-├── apps/backend/      ← NestJS API
-├── apps/frontend/     ← Next.js
-├── apps/worker/       ← BullMQ Worker
-└── packages/shared/   ← Types, constants ที่ใช้ร่วมกัน
+├── apps/
+│   ├── backend/       ← NestJS API + Orchestrator
+│   ├── frontend/      ← Next.js Dashboard
+│   ├── worker/        ← Task Worker Process
+│   └── cli/           ← CLI Tool (tiwa command)
+├── packages/
+│   └── shared/        ← Shared types & utilities
+├── turbo.json         ← Turborepo pipeline config
+├── pnpm-workspace.yaml
+└── package.json
 ```
 
-ข้อดี:
-- **แก้ type ที่เดียว ใช้ได้ทุก app** — เปลี่ยน `Task` interface ใน shared ทุก app เห็นทันที
-- **PR เดียวแก้ข้าม service ได้** — เช่น เพิ่ม API endpoint + หน้า UI ใน PR เดียว
-- **ไม่ต้อง publish package** — ใช้ `workspace:*` link ภายใน
-- **Build pipeline ฉลาด** — Turborepo รู้ว่าถ้า shared เปลี่ยน ต้อง rebuild app ที่ depend
-
-### เครื่องมือที่ใช้
-
-| เครื่องมือ | หน้าที่ |
-|-----------|--------|
-| **pnpm** | Package manager — จัดการ dependencies + workspaces |
-| **Turborepo** | Build orchestrator — รัน build/dev/test ข้าม packages อย่างฉลาด |
+**ทำไมใช้ Monorepo?**
+- แชร์ types ระหว่าง backend/frontend/worker ผ่าน `@tiwa/shared`
+- Build ทุก app พร้อมกันด้วย `turbo build`
+- PR เดียวแก้ได้ทุก service
 
 ---
 
 ## 2. ภาพรวม Structure
 
 ```
-Tiwa/
-├── .gitignore                 # ไฟล์ที่ git ไม่ต้อง track
-├── .nvmrc                     # ระบุ Node.js version
-├── .npmrc                     # ตั้งค่า pnpm
-├── .env.example               # ตัวอย่าง env สำหรับ dev
-├── .env.prod.example          # ตัวอย่าง env สำหรับ production
+tiwa/
+├── apps/
+│   ├── backend/
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma        ← SQLite schema (Agent, Task, Project, Workflow)
+│   │   │   └── seed.ts              ← Seed 8 agents + sample tasks
+│   │   ├── src/
+│   │   │   ├── agents/              ← Agent CRUD + stats
+│   │   │   ├── ai-provider/         ← Anthropic, OpenAI, Gemini SDK wrapper
+│   │   │   ├── events/              ← WebSocket (Socket.IO) gateway
+│   │   │   ├── logs/                ← Log storage (JSON file-based)
+│   │   │   ├── orchestrator/        ← Task execution brain
+│   │   │   ├── prisma/              ← Prisma service
+│   │   │   ├── projects/            ← Project CRUD
+│   │   │   ├── queue/               ← In-process task queue
+│   │   │   ├── settings/            ← API key management (JSON file)
+│   │   │   ├── tasks/               ← Task CRUD + board view
+│   │   │   ├── workers/             ← Worker registry + heartbeat
+│   │   │   ├── workflows/           ← Workflow management
+│   │   │   ├── app.module.ts        ← Root module
+│   │   │   └── main.ts              ← Entry point
+│   │   ├── data/                    ← Runtime data (gitignored)
+│   │   │   ├── tiwa.db              ← SQLite database
+│   │   │   ├── settings.json        ← API keys & provider config
+│   │   │   ├── logs.json            ← Activity logs
+│   │   │   └── chat-messages.json   ← Chat history
+│   │   └── .env                     ← DATABASE_URL="file:./data/tiwa.db"
+│   │
+│   ├── frontend/
+│   │   └── src/
+│   │       ├── app/page.tsx          ← Main page (SPA routing)
+│   │       ├── components/
+│   │       │   ├── office/           ← Virtual office components
+│   │       │   └── pages/            ← Page views (TaskBoard, Agents, Settings, etc.)
+│   │       ├── hooks/                ← React Query hooks + WebSocket
+│   │       ├── lib/api.ts            ← API client
+│   │       └── store/useAppStore.ts  ← Zustand state
+│   │
+│   ├── worker/
+│   │   └── src/
+│   │       ├── main.ts              ← HTTP server + heartbeat loop
+│   │       ├── processor.ts         ← Task execution (CLI-based)
+│   │       ├── cli-executor.ts      ← Spawn Claude Code / Codex CLI
+│   │       └── cli-detector.ts      ← Detect installed CLI tools
+│   │
+│   └── cli/
+│       └── src/
+│           ├── commands/             ← start, stop, restart, worker, status, config, etc.
+│           ├── core/
+│           │   ├── daemon.ts         ← Process spawning, build, DB init
+│           │   └── config.ts         ← ~/.tiwa/config.yml management
+│           └── types/index.ts        ← CLI config schema (Zod)
 │
-├── package.json               # Root package — scripts + devDependencies กลาง
-├── pnpm-workspace.yaml        # บอก pnpm ว่า workspace อยู่ตรงไหน
-├── pnpm-lock.yaml             # Lock file (version ที่ install จริง)
-├── tsconfig.base.json         # TypeScript config กลาง ที่ทุก app extend
-├── turbo.json                 # Turborepo pipeline config
-│
-├── apps/                      # ← แอปพลิเคชันที่ deploy ได้
-│   ├── backend/               #    NestJS API server
-│   ├── frontend/              #    Next.js web dashboard
-│   └── worker/                #    Background job processor
-│
-├── packages/                  # ← Library ภายในที่ไม่ deploy แยก
-│   └── shared/                #    Types, constants, utilities
-│
-├── docker/                    # ← Dockerfile ของแต่ละ service
-│   ├── backend/Dockerfile
-│   ├── frontend/Dockerfile
-│   └── worker/Dockerfile
-│
-├── docker-compose.dev.yml     # Docker สำหรับ dev (infra เท่านั้น)
-└── docker-compose.prod.yml    # Docker สำหรับ production (ทุก service)
+└── packages/
+    └── shared/
+        └── src/index.ts              ← Shared types & constants
 ```
-
-### หลักการแบ่ง `apps/` vs `packages/`
-
-| โฟลเดอร์ | คือ | ตัวอย่าง |
-|----------|-----|---------|
-| `apps/` | สิ่งที่ **รันได้** และ **deploy** ได้ | API server, Web app, Worker |
-| `packages/` | **Library** ที่ใช้ร่วมกัน ไม่ได้รันเอง | Shared types, UI components, utils |
 
 ---
 
 ## 3. Root Config Files
 
-### `pnpm-workspace.yaml`
-
-```yaml
-packages:
-  - "apps/*"
-  - "packages/*"
-```
-
-บอก pnpm ว่า: "ภายใน `apps/` และ `packages/` แต่ละโฟลเดอร์คือ 1 package"
-
-ทำให้ pnpm รู้ว่า:
-- `apps/backend/` → เป็น package ชื่อ `backend`
-- `packages/shared/` → เป็น package ชื่อ `@tiwa/shared`
-- เวลา backend ต้องการ `@tiwa/shared` → link ไปที่โฟลเดอร์จริง ไม่ต้อง download จาก npm
+| ไฟล์ | หน้าที่ |
+|------|---------|
+| `turbo.json` | Pipeline: build, dev, lint, test — กำหนด cache + dependency graph |
+| `pnpm-workspace.yaml` | ระบุ `apps/*` และ `packages/*` เป็น workspace |
+| `package.json` | Scripts: `dev`, `build`, `clean`, `docker:*` |
+| `.env` | Environment variables (DATABASE_URL, ports, API keys) |
+| `.gitignore` | ซ่อน `data/*.db`, `data/*.json`, `.env`, `node_modules`, `dist` |
 
 ---
 
-### `package.json` (root)
-
-```
-{
-  "name": "tiwa",
-  "private": true,          ← ป้องกันไม่ให้ publish ขึ้น npm โดยไม่ตั้งใจ
-  "packageManager": "pnpm@10.11.0",  ← ล็อคเวอร์ชัน pnpm ให้ทีมใช้เหมือนกัน
-  "scripts": { ... },       ← คำสั่งกลาง
-  "devDependencies": { ... },  ← tools ที่ใช้ระดับ root
-  "pnpm": {
-    "onlyBuiltDependencies": [...]  ← อนุญาต post-install scripts
-  }
-}
-```
-
-**Scripts ที่สำคัญ:**
-
-| Script | ทำอะไร |
-|--------|--------|
-| `pnpm dev` | รัน `turbo dev` → เริ่ม dev server ทุก app พร้อมกัน |
-| `pnpm build` | รัน `turbo build` → build ทุก package ตามลำดับ dependency |
-| `pnpm docker:dev` | เปิด postgres + redis + mongodb ใน Docker |
-| `pnpm docker:dev:down` | ปิด Docker containers |
-| `pnpm db:migrate` | รัน Prisma migration (สร้าง/อัพเดท table ใน postgres) |
-| `pnpm db:studio` | เปิด Prisma Studio (GUI ดู database) |
-
-**ทำไม devDependencies อยู่ที่ root:**
-- `turbo` — ใช้รัน build pipeline ทั้ง monorepo
-- `prettier` — format code ทุก package ด้วย style เดียวกัน
-- `typescript` + `@types/node` — shared TypeScript compiler
-
----
-
-### `tsconfig.base.json`
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",        // compile เป็น JS version ไหน
-    "module": "Node16",        // ใช้ module system แบบ Node.js
-    "strict": true,            // เปิด strict mode ทุกอย่าง
-    "esModuleInterop": true,   // ให้ import CommonJS ได้สะดวก
-    "skipLibCheck": true,      // ไม่ check type ใน node_modules (เร็วขึ้น)
-    "declaration": true,       // สร้าง .d.ts (type definitions)
-    ...
-  }
-}
-```
-
-นี่คือ **config กลาง** ที่ทุก app/package จะ `extends` ไป:
-
-```
-tsconfig.base.json          ← ตั้งค่ากลาง
-├── packages/shared/tsconfig.json     ← extends base + เพิ่ม outDir
-├── apps/backend/tsconfig.json        ← extends base + เปิด decorators
-├── apps/worker/tsconfig.json         ← extends base + เพิ่ม outDir
-└── apps/frontend/tsconfig.json       ← extends base + เปลี่ยนเป็น Bundler
-```
-
-ข้อดี: เปลี่ยน strict rule ที่เดียว มีผลทั้งโปรเจกต์
-
----
-
-### `turbo.json`
-
-```json
-{
-  "tasks": {
-    "build": {
-      "dependsOn": ["^build"],     // ← build package ที่ depend ก่อน
-      "outputs": ["dist/**", ".next/**"]  // ← cache ผลลัพธ์
-    },
-    "dev": {
-      "cache": false,              // ← dev ไม่ cache
-      "persistent": true           // ← process ค้างอยู่ (ไม่จบ)
-    }
-  }
-}
-```
-
-**`dependsOn: ["^build"]` คืออะไร?**
-
-สมมติ `backend` depend on `@tiwa/shared`:
-```
-@tiwa/shared  →  backend
-```
-
-เครื่องหมาย `^` หมายถึง "build dependency ก่อน"
-ดังนั้น: shared build ก่อน → แล้ว backend ค่อย build
-
-**Turborepo ทำอะไรให้อัตโนมัติ:**
-1. วิเคราะห์ dependency graph
-2. Build ตามลำดับที่ถูกต้อง (shared → backend, frontend, worker พร้อมกัน)
-3. Cache ผลลัพธ์ — ถ้าไม่มีอะไรเปลี่ยน ข้ามไป
-4. รัน task ที่ไม่ depend กัน แบบขนาน (parallel)
-
-```
-pnpm build
-  ├── @tiwa/shared:build    ← build ก่อน (ทุก app depend)
-  │   ├── backend:build     ← build พร้อมกัน (ไม่ depend กัน)
-  │   ├── frontend:build    ←
-  │   └── worker:build      ←
-```
-
----
-
-### `.npmrc`
-
-```ini
-auto-install-peers=true        # install peer dependencies อัตโนมัติ
-strict-peer-dependencies=false # ไม่ error ถ้า peer version ไม่ตรงเป๊ะ
-shamefully-hoist=true          # hoist packages ขึ้น root node_modules
-```
-
-**`shamefully-hoist=true` คืออะไร?**
-
-ปกติ pnpm จะเก็บ package แยกกันอย่างเคร่งครัด (strict isolation)
-แต่บาง package (เช่น NestJS) คาดหวังว่าจะหา dependency ได้จาก root
-`shamefully-hoist=true` ยก package ที่ใช้บ่อยขึ้นไปไว้ที่ `node_modules/` ระดับ root
-ทำให้ทุก package เข้าถึงได้
-
----
-
-### `.nvmrc`
-
-```
-24
-```
-
-บอกว่าโปรเจกต์นี้ใช้ Node.js 24
-ถ้าใช้ `nvm` (Node Version Manager) แค่รัน `nvm use` มันจะอ่านไฟล์นี้แล้วสลับ version ให้
-
----
-
-### `.env.example` vs `.env.prod.example`
-
-| ไฟล์ | ใช้ตอนไหน | ค่า host |
-|------|----------|----------|
-| `.env.example` | Development | `localhost` (เพราะ app รันบนเครื่อง) |
-| `.env.prod.example` | Production | ชื่อ Docker service เช่น `postgres`, `redis` |
-
-**.env ไม่ถูก commit** (อยู่ใน .gitignore)
-.env.example คือ **template** ให้ copy ไปใช้:
-
-```bash
-cp .env.example .env    # สร้าง .env จริงจาก template
-```
-
----
-
-### `.gitignore`
-
-```gitignore
-node_modules/     # dependencies — install ใหม่ได้
-dist/             # build output — build ใหม่ได้
-.next/            # Next.js build cache
-.env              # secrets — ห้าม commit!
-.turbo/           # Turborepo cache
-coverage/         # test coverage reports
-*.tsbuildinfo     # TypeScript incremental build cache
-.DS_Store         # macOS metadata file
-```
-
-หลักการ: **อะไรที่สร้างใหม่ได้ หรือเป็น secret ไม่ต้อง commit**
-
----
-
-## 4. `packages/shared` — Shared Package
-
-### หน้าที่
-
-เก็บ **สิ่งที่ทุก app ใช้ร่วมกัน** เพื่อไม่ต้องเขียนซ้ำ:
+## 4. packages/shared — Shared Package
 
 ```
 packages/shared/
-├── package.json
-├── tsconfig.json
-└── src/
-    ├── index.ts              # re-export ทุกอย่าง
-    ├── types/
-    │   ├── index.ts          # re-export types
-    │   ├── agent.ts          # Agent, AgentRole, AgentStatus
-    │   ├── project.ts        # Project, ProjectStatus, GitHubRepo
-    │   ├── task.ts           # Task, TaskStatus, TaskType
-    │   └── workflow.ts       # Workflow, WorkflowStep, WorkflowStatus
-    ├── constants/
-    │   └── index.ts          # QUEUE_NAMES, WS_EVENTS, defaults
-    └── utils/
-        └── index.ts          # generateId, sleep
+├── src/index.ts     ← Export types & constants
+├── package.json     ← name: "@tiwa/shared"
+└── tsconfig.json
 ```
 
-### ตัวอย่างการใช้งาน
+ใช้ใน backend, frontend, worker, cli ด้วย `"@tiwa/shared": "workspace:*"`
 
-ใน `apps/backend/`:
+---
+
+## 5. apps/backend — NestJS API
+
+### Entry Point
+
 ```typescript
-import { Task, TaskStatus, QUEUE_NAMES } from '@tiwa/shared';
+// main.ts
+const app = await NestFactory.create(AppModule);
+app.enableCors({ origin: process.env.FRONTEND_URL || '*' });
+await app.listen(process.env.BACKEND_PORT || 4001, '0.0.0.0');
 ```
 
-ใน `apps/worker/`:
+### Module Map
+
+```
+AppModule
+├── ConfigModule          ← .env loading (isGlobal)
+├── PrismaModule          ← SQLite database access
+├── EventsModule          ← WebSocket gateway (Socket.IO)
+├── SettingsModule        ← API key management (JSON file)
+├── AiProviderModule      ← Anthropic, OpenAI, Gemini clients
+├── AgentsModule          ← Agent CRUD + real-time status
+├── TasksModule           ← Task CRUD + auto-queue
+├── ProjectsModule        ← Project management
+├── WorkflowsModule       ← Workflow orchestration
+├── LogsModule            ← Log + chat storage (JSON files)
+├── WorkersModule         ← Worker registry + heartbeat
+├── OrchestratorModule    ← Task execution brain
+└── QueueModule           ← In-process task queue (Global)
+```
+
+### API Routes
+
+| Method | Path | หน้าที่ |
+|--------|------|---------|
+| GET | `/health` | Health check |
+| GET | `/api/agents` | List agents |
+| GET | `/api/agents/stats` | Active/total/error counts |
+| POST | `/api/agents` | Create agent |
+| PATCH | `/api/agents/:id` | Update agent |
+| GET | `/api/tasks` | List tasks (filterable) |
+| GET | `/api/tasks/board` | Kanban board view |
+| POST | `/api/tasks` | Create task |
+| PATCH | `/api/tasks/:id` | Update task (auto-queue if status=queued) |
+| POST | `/api/orchestrator/submit` | Submit + queue task for AI execution |
+| POST | `/api/orchestrator/execute/:taskId` | Execute task immediately |
+| POST | `/api/orchestrator/worker-result` | Receive task result from worker (CLI) |
+| GET | `/api/orchestrator/status` | Queue & agent status |
+| GET | `/api/projects` | List projects |
+| GET | `/api/workflows` | List workflows |
+| GET | `/api/logs` | Query logs (department, level, limit) |
+| GET | `/api/logs/chat/:roomId` | Chat messages by room |
+| POST | `/api/logs/chat/:roomId` | Send chat message |
+| GET | `/api/workers` | List connected workers |
+| POST | `/api/workers/heartbeat` | Worker heartbeat |
+| GET | `/api/settings` | Get settings (keys masked) |
+| PUT | `/api/settings/providers/:provider/key` | Set API key |
+| DELETE | `/api/settings` | Clear all settings |
+| GET | `/api/docs` | Swagger documentation |
+
+### WebSocket Events (Socket.IO)
+
+| Event | Direction | Payload |
+|-------|-----------|---------|
+| `agent:status` | Server → Client | `{ id, status, task, ... }` |
+| `task:update` | Server → Client | Full task object |
+| `workflow:update` | Server → Client | Workflow status |
+| `log:entry` | Server → Client | Log entry |
+| `worker:update` | Server → Client | Worker list |
+| `chat:message` | Bidirectional | `{ roomId, sender, content }` |
+
+### Key Services
+
+#### OrchestratorService — สมองของระบบ
+
+```
+executeTask(taskId)
+  1. โหลด task จาก DB
+  2. เลือก agent (role mapping + fallback)
+  3. Set agent status = working
+  4. ตรวจหา connected worker:
+     a. Worker available → dispatch ไป worker (CLI execution)
+        → Worker spawn claude/codex CLI
+        → Worker POST result กลับมา handleWorkerResult()
+     b. No worker → fallback ใช้ AI API (Anthropic/OpenAI/Gemini)
+  5. บันทึกผลลัพธ์ลง task.resultJson
+  6. อัพเดท agent status กลับเป็น idle
+  7. Emit WebSocket events
+
+handleWorkerResult(result)
+  1. รับผลจาก worker (taskId, status, content, provider, durationMs)
+  2. อัพเดท task status (completed/failed)
+  3. Reset agent → idle
+  4. Emit WebSocket events
+```
+
+**Agent Selection Logic:**
+```
+Task Type → Preferred Roles
+  code    → [backend, frontend]
+  test    → [qa]
+  review  → [reviewer, qa]
+  deploy  → [devops]
+  plan    → [planner, backend]
+  fix     → [backend, frontend]
+
+ลำดับ: idle agent ตรง role → idle agent ใดก็ได้ → agent ที่ว่างล่าสุด
+```
+
+#### InProcessQueueService — คิวทำงาน
+
 ```typescript
-import { QUEUE_NAMES, DEFAULT_WORKER_CONCURRENCY } from '@tiwa/shared';
+// ไม่ใช้ Redis/BullMQ — ทำงานใน process เดียวกัน
+queue.add(taskId)          // เพิ่ม task เข้าคิว
+queue.setProcessor(fn)     // ลงทะเบียน processor function
+// ทำทีละ 1 task (sequential) — เมื่อเสร็จทำตัวถัดไป
 ```
 
-ใน `apps/frontend/`:
-```typescript
-import { Agent, AgentStatus } from '@tiwa/shared';
+#### JsonStorageService — เก็บ logs/chat
+
+```
+data/logs.json          ← max 10,000 entries, prune ถึง 5,000
+data/chat-messages.json ← ไม่จำกัด
 ```
 
-### `workspace:*` คืออะไร
+- In-memory cache + file sync
+- Atomic write: เขียน `.tmp` แล้ว rename
 
-ใน `apps/backend/package.json`:
-```json
+#### SettingsService — จัดการ API keys
+
+```
+data/settings.json
 {
-  "dependencies": {
-    "@tiwa/shared": "workspace:*"
-  }
+  "providers": {
+    "anthropic": { "apiKey": "sk-ant-..." },
+    "openai": { "apiKey": "sk-..." },
+    "gemini": { "authType": "api_key", "apiKey": "AIza..." }
+  },
+  "defaults": { "model": "claude-sonnet-4-20250514", "maxTokens": 4096 }
 }
 ```
 
-`workspace:*` บอก pnpm ว่า: "package นี้อยู่ใน workspace ของเรา ไม่ต้องไป download จาก npm"
-pnpm จะ symlink `node_modules/@tiwa/shared` → `packages/shared/`
-
-### package.json ของ shared
-
-```json
-{
-  "name": "@tiwa/shared",          // ชื่อ package (ใช้ scope @tiwa/)
-  "main": "./dist/index.js",       // entry point หลังจาก build
-  "types": "./dist/index.d.ts",    // type definitions หลังจาก build
-  "exports": {                     // modern entry point
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  }
-}
-```
-
-**flow:**
-1. เขียน TypeScript ใน `src/`
-2. `pnpm build` → tsc compile เป็น JavaScript ใน `dist/`
-3. app อื่นๆ import จาก `dist/` (ผ่าน `main` field)
+- Frontend เห็นแค่ key ที่ mask แล้ว (`sk-a...1234`)
+- ถ้าไม่มีใน settings → fallback ไป env vars
 
 ---
 
-### Types — ทำไมต้องกำหนด
+## 6. apps/frontend — Next.js Dashboard
 
-```typescript
-// types/agent.ts
-export enum AgentRole {
-  PLANNER = 'planner',
-  BACKEND = 'backend',
-  FRONTEND = 'frontend',
-  QA = 'qa',
-  DEVOPS = 'devops',
-  REVIEWER = 'reviewer',
-}
+### Tech Stack
+
+| Library | Version | หน้าที่ |
+|---------|---------|---------|
+| Next.js | 15 | App Router (SPA mode) |
+| React | 19 | UI rendering |
+| Zustand | latest | Client state (currentPage, selectedRoom, etc.) |
+| TanStack Query | latest | Server state (API data fetching + cache) |
+| Tailwind CSS | 4 | Styling |
+| Socket.IO Client | latest | Real-time WebSocket |
+
+### Pages (SPA — single page.tsx with tab routing)
+
+| Tab | Component | หน้าที่ |
+|-----|-----------|---------|
+| Virtual Office | `OfficeView` | แสดง agents ในรูปแบบ office layout |
+| Task Board | `TaskBoard` | Kanban board (todo/in_progress/review/done) |
+| AI Agents | `AgentsPage` | Card view ของ 8 agents + stats |
+| Projects | `ProjectsPage` | Project list |
+| Workflows | `WorkflowsPage` | Multi-step workflow view |
+| Testing | `TestingPage` | QA test management |
+| Logs | `LogsPage` | Live activity feed (filter by department) |
+| Settings | `SettingsPage` | API key management + provider config |
+
+### State Flow
+
+```
+Zustand Store (useAppStore)
+├── currentPage        ← Tab navigation
+├── selectedRoom       ← Chat room selection
+├── selectedTaskId     ← Task detail view
+├── connectionStatus   ← WebSocket connected/disconnected
+└── useMockData        ← Toggle mock/live API (default: false)
+
+React Query
+├── useAgents()        ← GET /api/agents (auto-refetch)
+├── useTasks()         ← GET /api/tasks
+├── useTaskBoard()     ← GET /api/tasks/board
+├── useSettings()      ← GET /api/settings
+└── useOrchestratorStatus() ← GET /api/orchestrator/status
+
+WebSocket (useSocket hook)
+├── Subscribe: agent:status, task:update, log:entry, etc.
+└── On event → invalidate React Query cache → UI re-render
 ```
 
-ถ้าไม่มี shared types:
-- Backend ส่ง `{ status: "working" }` → Frontend อาจเช็ค `status === "active"` → bug!
-- Worker ส่ง queue ชื่อ `"task"` → Backend listen ที่ `"tasks"` → ไม่เจอกัน!
+### API Client
 
-ถ้ามี shared types:
-- ทุก app ใช้ `AgentStatus.WORKING` เหมือนกัน
-- ทุก app ใช้ `QUEUE_NAMES.TASK` → ค่าเดียวกันเสมอ
+```typescript
+// lib/api.ts
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:6769';
+```
 
 ---
 
-### Constants — ค่าคงที่ที่ใช้ร่วม
+## 7. apps/worker — Worker Process
 
-```typescript
-// constants/index.ts
-export const QUEUE_NAMES = {
-  TASK: 'tiwa:task',
-  CODE_EXECUTION: 'tiwa:code-execution',
-  ...
-} as const;
+### Overview
+
+Worker เป็น standalone Node.js HTTP server ที่ทำหน้าที่:
+1. รับ task จาก backend ผ่าน HTTP
+2. Execute task ผ่าน **Claude Code CLI** หรือ **Codex CLI** โดยตรง (ไม่ยิง API)
+3. ส่ง heartbeat ทุก 3 วินาทีเพื่อบอก backend ว่ายังทำงานอยู่
+4. Report ผลลัพธ์กลับไป backend เมื่อ task เสร็จ
+
+```
+Worker
+├── HTTP Server (port 6770)
+│   ├── GET /health
+│   ├── GET /status
+│   ├── GET /cli-tools          ← CLI tools availability info
+│   ├── POST /agent/assign      ← รับ task → spawn CLI
+│   └── POST /agent/update      ← อัพเดท agent config
+│
+├── CLI Executor
+│   ├── claude -p "prompt" --output-format text --verbose
+│   └── codex -q "prompt" --full-auto
+│
+├── Result Reporting
+│   └── POST backend/api/orchestrator/worker-result
+│       { workerId, taskId, status, content, provider, durationMs }
+│
+└── Heartbeat Loop (ทุก 3 วินาที)
+    └── POST backend/api/workers/heartbeat
+        { workerId, host, port, agents, status, uptime, cliTools }
 ```
 
-**`as const`** ทำให้ TypeScript รู้ค่าจริงๆ:
-- ไม่มี `as const`: type = `{ TASK: string }` — อะไรก็ได้
-- มี `as const`: type = `{ TASK: "tiwa:task" }` — ค่าเฉพาะเจาะจง
+### CLI-Based Task Execution
+
+```
+POST /agent/assign (จาก backend)
+  1. รับ task data (taskId, type, title, description, agentRole)
+  2. เลือก CLI provider (claude / codex)
+     - ถ้า task มี provider field → ใช้ตามนั้น
+     - ถ้าไม่มี → ใช้ DEFAULT_CLI_PROVIDER env var
+     - Fallback → ใช้ตัวที่ available
+  3. สร้าง prompt ตาม task type + agent role
+  4. Spawn CLI process (child_process.spawn)
+  5. Capture stdout/stderr
+  6. POST result กลับไป backend (/api/orchestrator/worker-result)
+```
+
+### CLI Tools Support
+
+| CLI | Command | Mode | ใช้สำหรับ |
+|-----|---------|------|-----------|
+| Claude Code | `claude -p "prompt" --output-format text` | Non-interactive print | Code gen, review, planning |
+| Codex | `codex -q "prompt" --full-auto` | Quiet + auto-approve | Code gen, file editing |
+
+**ข้อดีของ CLI mode:**
+- Built-in tool use (file editing, shell commands, code analysis)
+- ไม่ต้อง manage API keys — ใช้ credentials ที่ CLI จัดการเอง
+- Multi-step reasoning + file manipulation ในตัว
+
+### Heartbeat System
+
+```
+Worker → POST /api/workers/heartbeat → Backend
+  payload: { workerId, host, port, agents, status, uptime, cliTools }
+Backend: บันทึก worker ใน registry (in-memory)
+         ถ้าไม่ได้ heartbeat 10 วินาที → mark offline
+Frontend: แสดง worker status ผ่าน WebSocket
+```
 
 ---
 
-## 5. `apps/backend` — NestJS API
+## 8. apps/cli — CLI Tool
 
-### หน้าที่
-
-เป็น **Control Plane** ของระบบ Tiwa:
-- รับ HTTP requests จาก frontend
-- จัดการ projects, agents, tasks ใน PostgreSQL
-- ส่งงานเข้า queue (Redis/BullMQ) ให้ worker
-- WebSocket real-time updates กลับไป frontend
-
-### โครงสร้างไฟล์
-
-```
-apps/backend/
-├── package.json         # dependencies ของ backend
-├── tsconfig.json        # TypeScript config (extends base)
-├── nest-cli.json        # NestJS CLI config
-└── src/
-    ├── main.ts          # จุดเริ่มต้น — bootstrap app
-    ├── app.module.ts    # Root module — รวม modules ทั้งหมด
-    ├── app.controller.ts  # Root controller — /health endpoint
-    └── app.service.ts   # Root service — business logic
-```
-
-### `main.ts` — จุดเริ่มต้น
-
-```typescript
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  // CORS — อนุญาตให้ frontend (port 3000) เรียก API ได้
-  app.enableCors({ origin: 'http://localhost:3000' });
-
-  // Validation Pipe — validate request body อัตโนมัติ
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,            // ตัด field ที่ไม่ได้กำหนดใน DTO ออก
-    forbidNonWhitelisted: true, // error ถ้าส่ง field แปลกเข้ามา
-    transform: true,            // แปลง type อัตโนมัติ (string → number)
-  }));
-
-  // Swagger — สร้าง API docs อัตโนมัติ ที่ /api/docs
-  SwaggerModule.setup('api/docs', app, document);
-
-  await app.listen(4000);
-}
-```
-
-### `app.module.ts` — Root Module
-
-```typescript
-@Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,           // ใช้ได้ทุก module ไม่ต้อง import ซ้ำ
-      envFilePath: ['.env', '../../.env'],  // อ่าน .env จาก 2 ที่
-    }),
-  ],
-  controllers: [AppController],
-  providers: [AppService],
-})
-export class AppModule {}
-```
-
-**NestJS Module System:**
-```
-AppModule (root)
-├── ConfigModule     → อ่าน environment variables
-├── (จะเพิ่ม) PrismaModule  → เชื่อม PostgreSQL
-├── (จะเพิ่ม) BullModule    → เชื่อม Redis queue
-├── (จะเพิ่ม) MongooseModule → เชื่อม MongoDB
-├── (จะเพิ่ม) AuthModule    → JWT authentication
-├── (จะเพิ่ม) ProjectModule → CRUD projects
-├── (จะเพิ่ม) AgentModule   → จัดการ AI agents
-└── (จะเพิ่ม) TaskModule    → จัดการ tasks/workflows
-```
-
-### tsconfig.json ของ backend
-
-```json
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "module": "CommonJS",              // NestJS ใช้ CommonJS (require/exports)
-    "emitDecoratorMetadata": true,     // NestJS ต้องการ metadata จาก decorators
-    "experimentalDecorators": true     // เปิดใช้ @Module, @Controller, @Get ฯลฯ
-  }
-}
-```
-
-**ทำไม NestJS ใช้ CommonJS?**
-NestJS ใช้ `reflect-metadata` เพื่ออ่าน type information ตอน runtime
-(เช่น `constructor(private service: AppService)` — NestJS รู้ว่าต้อง inject อะไร)
-สิ่งนี้ทำงานได้กับ CommonJS เท่านั้น (ยังไม่รองรับ ESM เต็มรูปแบบ)
-
-### Key Dependencies
-
-| Package | หน้าที่ |
-|---------|--------|
-| `@nestjs/core` | NestJS framework |
-| `@prisma/client` | ORM เชื่อม PostgreSQL |
-| `bullmq` | Queue system สำหรับส่งงานให้ worker |
-| `@nestjs/websockets` + `socket.io` | Real-time communication กับ frontend |
-| `passport` + `passport-jwt` | JWT authentication |
-| `mongoose` | เชื่อม MongoDB (เก็บ logs, documents) |
-| `class-validator` | Validate request body ด้วย decorators |
-| `@nestjs/swagger` | สร้าง API docs อัตโนมัติ |
-
----
-
-## 6. `apps/worker` — BullMQ Worker
-
-### หน้าที่
-
-เป็น **Background Job Processor** — รับงานจาก queue แล้วทำ:
-- รัน AI agent สั่งเขียนโค้ด
-- รัน test/build
-- ทำ code review
-- Deploy
-
-### ทำไมแยก worker ออกจาก backend?
-
-```
-ถ้ารวมกัน:
-┌──────────────────────────┐
-│ Backend (NestJS)         │
-│  - รับ HTTP requests     │  ← ถ้างาน AI ใช้เวลา 5 นาที
-│  - รัน AI agent          │     API อื่นจะช้าตามไปด้วย!
-│  - ส่ง WebSocket         │
-└──────────────────────────┘
-
-ถ้าแยก:
-┌──────────────────┐     Queue     ┌──────────────────┐
-│ Backend (NestJS) │ ──────────▶  │ Worker           │
-│  - รับ requests  │   (Redis)    │  - รัน AI agent  │
-│  - ส่ง WebSocket │ ◀──────────  │  - รัน test/build│
-│  - จัดการ data   │   (Result)   │  - code review   │
-└──────────────────┘              └──────────────────┘
-```
-
-ข้อดีของการแยก:
-1. **Backend เร็วเสมอ** — ไม่ถูก block โดยงานหนัก
-2. **Scale แยกกัน** — ถ้างานเยอะ เพิ่ม worker ได้โดยไม่ต้องเพิ่ม backend
-3. **Crash แยกกัน** — worker crash ไม่กระทบ API
-4. **Memory แยกกัน** — AI task อาจใช้ RAM เยอะ ไม่กระทบ API
-
-### โครงสร้างไฟล์
-
-```
-apps/worker/
-├── package.json
-├── tsconfig.json
-└── src/
-    ├── main.ts         # สร้าง Worker instance, connect Redis
-    └── processor.ts    # Logic จัดการแต่ละ job type
-```
-
-### `main.ts` — Worker Bootstrap
-
-```typescript
-// กำหนดการเชื่อมต่อ Redis (BullMQ ใช้ Redis เป็น message broker)
-const connection = {
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
-  maxRetriesPerRequest: null,  // BullMQ ต้องการค่านี้เป็น null
-};
-
-// สร้าง Worker ที่ listen queue ชื่อ "tiwa:task"
-const worker = new Worker(QUEUE_NAMES.TASK, processJob, {
-  connection,
-  concurrency,  // จำนวน job ที่รันพร้อมกัน (default: 3)
-});
-```
-
-**BullMQ Flow:**
-```
-1. Frontend: "สร้าง login page"
-2. Backend: สร้าง Task ใน DB → ส่ง Job เข้า Redis queue
-3. Worker: หยิบ Job จาก queue → รัน AI agent → อัพเดทผลลัพธ์
-4. Backend: รับผลลัพธ์ → ส่ง WebSocket update ไป frontend
-```
-
-### `processor.ts` — Job Handler
-
-```typescript
-export async function processJob(job: Job<TaskJobData>) {
-  switch (job.data.type) {
-    case 'code':    return handleCodeTask(...);     // AI เขียนโค้ด
-    case 'test':    return handleTestTask(...);     // รัน test suite
-    case 'review':  return handleReviewTask(...);   // AI review โค้ด
-    case 'deploy':  return handleDeployTask(...);   // deploy
-  }
-}
-```
-
-### Graceful Shutdown
-
-```typescript
-async function shutdown() {
-  await worker.close();   // รอ job ที่กำลังรันเสร็จ ไม่ตัดกลางคัน
-  process.exit(0);
-}
-process.on('SIGTERM', shutdown);  // Docker stop signal
-process.on('SIGINT', shutdown);   // Ctrl+C
-```
-
-ทำไมต้อง graceful shutdown? เพราะถ้า worker ถูก kill กลางคัน:
-- Job ที่กำลังรันจะ fail
-- ข้อมูลอาจเขียนไม่ครบ
-- ต้อง retry ใหม่ทั้งหมด
-
-### ทำไม worker ไม่ใช้ NestJS?
-
-| | NestJS | Plain Node.js |
-|---|--------|---------------|
-| RAM | ~80-120 MB | ~30-50 MB |
-| Startup | ~2-3 วินาที | ~0.5 วินาที |
-| HTTP server | มี (ไม่จำเป็น) | ไม่มี (ดี!) |
-| DI container | มี (overhead) | ไม่มี |
-
-Worker ไม่ต้องรับ HTTP → ไม่ต้องการ NestJS overhead
-แค่ต้อง connect Redis + process jobs → Plain Node.js เพียงพอ
-
----
-
-## 7. `apps/frontend` — Next.js Dashboard
-
-### หน้าที่
-
-เป็น **Dashboard UI** ที่แสดง:
-- Organization view แบบ virtual office
-- AI agent status real-time
-- Task progress & workflow
-- Chat กับ agent
-- Logs & monitoring
-
-### โครงสร้างไฟล์
-
-```
-apps/frontend/
-├── package.json
-├── tsconfig.json
-├── next.config.ts        # Next.js configuration
-├── postcss.config.mjs    # PostCSS config (สำหรับ Tailwind)
-└── src/
-    └── app/              # ← App Router (Next.js 13+)
-        ├── globals.css   # Tailwind CSS imports
-        ├── layout.tsx    # Root layout (HTML shell)
-        └── page.tsx      # หน้า Home
-```
-
-### `next.config.ts`
-
-```typescript
-const nextConfig: NextConfig = {
-  output: 'standalone',                      // สร้าง self-contained server
-  transpilePackages: ['@tiwa/shared'],       // compile shared package ด้วย
-};
-```
-
-**`output: 'standalone'` คืออะไร?**
-
-ปกติ Next.js build ได้โฟลเดอร์ `.next/` ที่ต้องใช้คู่กับ `node_modules/`
-แต่ `standalone` จะ copy เฉพาะไฟล์ที่จำเป็นมารวมกัน → Deploy ง่าย ภายใน Docker image เล็ก
-
-**`transpilePackages` คืออะไร?**
-
-`@tiwa/shared` เป็น package ภายใน monorepo
-Next.js ต้องรู้ว่าต้อง compile package นี้ด้วย (ไม่ใช่ skip เหมือน node_modules ปกติ)
-
-### App Router vs Pages Router
-
-```
-Next.js มี 2 แบบ:
-
-Pages Router (เก่า):           App Router (ใหม่):
-pages/                         src/app/
-├── index.tsx → /              ├── page.tsx → /
-├── about.tsx → /about         ├── about/page.tsx → /about
-└── api/                       ├── layout.tsx → shared layout
-    └── health.ts              └── loading.tsx → loading UI
-```
-
-เราใช้ **App Router** (อยู่ใน `src/app/`) เพราะ:
-- รองรับ React Server Components
-- Layout system ดีกว่า
-- Loading/Error UI built-in
-- เป็น standard ของ Next.js 15
-
-### `layout.tsx` — Root Layout
-
-```tsx
-export default function RootLayout({ children }) {
-  return (
-    <html lang="th">
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-ทุกหน้าจะถูกครอบด้วย layout นี้
-เหมือน `_app.tsx` ใน Pages Router — เป็นที่วาง providers, global styles, navigation
-
-### `globals.css` — Tailwind CSS v4
-
-```css
-@import 'tailwindcss';
-```
-
-Tailwind v4 ใช้ CSS-first config — แค่ import ก็พร้อมใช้
-(ไม่ต้องสร้าง `tailwind.config.js` เหมือน v3)
-
-### Key Dependencies
-
-| Package | หน้าที่ |
-|---------|--------|
-| `next` | React framework — SSR, routing, API routes |
-| `react` + `react-dom` | UI library |
-| `tailwindcss` | Utility-first CSS framework |
-| `zustand` | State management (เบากว่า Redux มาก) |
-| `@tanstack/react-query` | Server state management — caching, refetching |
-| `socket.io-client` | WebSocket client สำหรับ real-time updates |
-
----
-
-## 8. Docker Infrastructure
-
-### ทำไมต้องใช้ Docker
-
-Tiwa ต้องการ 3 databases: PostgreSQL, Redis, MongoDB
-แทนที่จะ install ทีละตัวบนเครื่อง → ใช้ Docker รันทั้ง 3 ด้วยคำสั่งเดียว
-
-### `docker-compose.dev.yml` — Development
-
-```
-┌─────────────────────────────────────────────┐
-│ Docker (docker-compose.dev.yml)             │
-│                                             │
-│  ┌───────────┐ ┌───────┐ ┌──────────────┐  │
-│  │ PostgreSQL│ │ Redis │ │   MongoDB    │  │
-│  │ :5432     │ │ :6379 │ │   :27017     │  │
-│  └───────────┘ └───────┘ └──────────────┘  │
-│                                             │
-└─────────────────────────────────────────────┘
-        ↕              ↕            ↕
-┌─────────────────────────────────────────────┐
-│ Native (pnpm dev)                           │
-│                                             │
-│  Backend :4000   Frontend :3000   Worker    │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
-**ทำไม dev compose รันแค่ databases?**
-
-ถ้ารัน backend ใน Docker → แก้โค้ด 1 บรรทัด → ต้อง rebuild image → ช้า!
-ถ้ารัน backend native (pnpm dev) → แก้โค้ด → hot-reload ทันที (~1 วินาที)
-
-โดยเฉพาะบน macOS — Docker volume mount ช้ากว่า native filesystem มาก
-
-### Health Checks
-
-```yaml
-healthcheck:
-  test: ["CMD-SHELL", "pg_isready -U tiwa"]
-  interval: 10s      # เช็คทุก 10 วินาที
-  timeout: 5s        # ถ้าไม่ตอบใน 5 วินาที ถือว่า fail
-  retries: 5         # fail 5 ครั้งติด = unhealthy
-```
-
-ทำไมต้องมี?
-- Docker รู้ว่า container **healthy จริง** ไม่ใช่แค่ process รันอยู่
-- `depends_on: condition: service_healthy` ใน prod compose → backend จะเริ่มต่อเมื่อ DB พร้อมจริงๆ
-
-### Volumes
-
-```yaml
-volumes:
-  - postgres_data:/var/lib/postgresql/data
-```
-
-Docker container เป็น ephemeral — ลบแล้วข้อมูลหาย
-Volume เก็บข้อมูลถาวร — ลบ container แล้วสร้างใหม่ ข้อมูลยังอยู่
-
-### `docker-compose.prod.yml` — Production
-
-ต่างจาก dev:
-
-| ส่วน | Dev | Production |
-|------|-----|-----------|
-| Services | 3 (databases) | 6 (databases + apps) |
-| Restart | `unless-stopped` | `always` |
-| Ports DB | เปิด (debug ได้) | ไม่เปิด (เข้าจากภายในเท่านั้น) |
-| Redis password | ไม่มี | บังคับ |
-| Resource limits | ไม่มี | กำหนด memory |
-| Start period | ไม่มี | มี (ให้เวลา warm up) |
-| Apps | รัน native | รันใน Docker container |
-
-### Dockerfiles — Multi-stage Build
-
-```dockerfile
-# Stage 1: Base — ติดตั้ง pnpm
-FROM node:24-alpine AS base
-RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
-
-# Stage 2: Dependencies — install node_modules
-FROM base AS deps
-COPY package.json pnpm-lock.yaml ...
-RUN pnpm install --frozen-lockfile
-
-# Stage 3: Build — compile TypeScript
-FROM deps AS build
-COPY src/ ...
-RUN pnpm build
-
-# Stage 4: Production deps — install เฉพาะ production deps
-FROM base AS prod-deps
-RUN pnpm install --frozen-lockfile --prod
-
-# Stage 5: Runtime — image สุดท้ายที่ deploy
-FROM node:24-alpine AS runtime
-COPY --from=prod-deps ...    # เฉพาะ prod dependencies
-COPY --from=build ...        # เฉพาะ compiled code
-USER tiwa                    # ไม่รันเป็น root (security)
-CMD ["node", "dist/main.js"]
-```
-
-**ทำไมต้อง multi-stage?**
-
-```
-ถ้า single stage:
-  node:24-alpine + devDependencies + source code + build output
-  = ~800 MB
-
-ถ้า multi-stage:
-  node:24-alpine + prodDependencies + build output เท่านั้น
-  = ~200 MB
-```
-
-เฉพาะสิ่งที่จำเป็นต้อง deploy เท่านั้นที่อยู่ใน image สุดท้าย
-
-### Non-root User
-
-```dockerfile
-RUN addgroup -S tiwa && adduser -S tiwa -G tiwa
-USER tiwa
-```
-
-Security best practice: ไม่รัน container เป็น root
-ถ้า container ถูก hack → attacker ได้แค่สิทธิ์ user ธรรมดา ไม่ใช่ root
-
----
-
-## 9. Data Flow — ข้อมูลไหลอย่างไร
-
-### ภาพรวม
-
-```
-User (Browser)
-    │
-    ▼
-┌──────────────────┐
-│ Frontend (Next.js)│ ─── REST API ──▶ ┌──────────────────┐
-│ :3000            │                   │ Backend (NestJS) │
-│                  │ ◀── WebSocket ─── │ :4000            │
-└──────────────────┘                   └──────────────────┘
-                                              │
-                           ┌──────────────────┼──────────────────┐
-                           ▼                  ▼                  ▼
-                    ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-                    │ PostgreSQL  │   │    Redis    │   │  MongoDB    │
-                    │ :5432       │   │    :6379    │   │  :27017     │
-                    │             │   │             │   │             │
-                    │ - Projects  │   │ - BullMQ    │   │ - Logs      │
-                    │ - Agents    │   │   Queue     │   │ - Outputs   │
-                    │ - Tasks     │   │ - Cache     │   │ - Documents │
-                    │ - Users     │   │ - Pub/Sub   │   │ - Raw data  │
-                    │ - Workflows │   │ - Sessions  │   │             │
-                    └─────────────┘   └──────┬──────┘   └─────────────┘
-                                             │
-                                             ▼
-                                     ┌──────────────────┐
-                                     │ Worker (BullMQ)  │
-                                     │                  │
-                                     │ - AI code gen    │
-                                     │ - Run tests      │
-                                     │ - Code review    │
-                                     │ - Deploy         │
-                                     └──────────────────┘
-```
-
-### ตัวอย่าง: User สั่ง "สร้าง Login Page"
-
-```
-1. User พิมพ์ "สร้าง login page" ใน dashboard
-   └─▶ Frontend ส่ง POST /api/tasks { title: "สร้าง login page" }
-
-2. Backend รับ request
-   ├─▶ สร้าง Task record ใน PostgreSQL
-   ├─▶ สร้าง Job ใน Redis queue (BullMQ)
-   └─▶ ส่ง WebSocket event "task:update" → Frontend แสดง "Queued"
-
-3. Worker หยิบ Job จาก Redis queue
-   ├─▶ เรียก AI API (Claude/GPT) ให้เขียนโค้ด
-   ├─▶ เขียนไฟล์ลง workspace
-   ├─▶ บันทึก log ลง MongoDB
-   └─▶ อัพเดท Job status ใน Redis
-
-4. Backend รับ event ว่า Job เสร็จ
-   ├─▶ อัพเดท Task status ใน PostgreSQL
-   └─▶ ส่ง WebSocket event → Frontend แสดง "Completed"
-
-5. Frontend อัพเดท UI real-time
-   └─▶ แสดงผลงาน + log ของ agent
-```
-
-### ทำไมใช้ 3 Databases
-
-| Database | เหมาะกับ | ตัวอย่างข้อมูล |
-|----------|---------|---------------|
-| **PostgreSQL** | ข้อมูลที่มี relation, ต้อง query ซับซ้อน | Projects, Tasks, Agents, Users |
-| **Redis** | ข้อมูลชั่วคราว, queue, cache | BullMQ jobs, sessions, rate limits |
-| **MongoDB** | ข้อมูลที่โครงสร้างไม่แน่นอน, ขนาดใหญ่ | Logs, AI outputs, raw documents |
-
----
-
-## 10. Development Workflow
-
-### เริ่มต้นพัฒนา
+### Commands
 
 ```bash
-# 1. Clone repo
-git clone <repo-url>
-cd tiwa
+tiwa start              # Build backend+frontend → init DB → start services
+tiwa stop               # Stop ทุก service
+tiwa restart            # Stop → build → start
 
-# 2. Install dependencies
+tiwa worker start       # Build + start worker
+tiwa worker stop        # Stop worker
+tiwa worker restart     # Stop → build → start worker
+tiwa worker status      # แสดง worker status
+
+tiwa status             # แสดง status ทั้งระบบ
+tiwa config init        # สร้าง ~/.tiwa/config.yml
+tiwa config get <key>   # อ่าน config
+tiwa config set <key>   # ตั้งค่า config
+
+tiwa project create     # สร้าง project
+tiwa agent list         # แสดง agents
+tiwa monitor            # Real-time monitoring
+tiwa run <task>         # Execute task
+```
+
+### Daemon Management
+
+```
+~/.tiwa/
+├── config.yml          ← Port settings, backend URL, etc.
+├── state.json          ← Backend/Frontend PID + port
+├── worker-state.json   ← Worker PID + port + backend URL
+└── logs/
+    ├── backend-stdout.log
+    ├── backend-stderr.log
+    ├── frontend-stdout.log
+    ├── frontend-stderr.log
+    ├── worker-stdout.log
+    └── worker-stderr.log
+```
+
+### Auto-Setup Flow (tiwa start)
+
+```
+tiwa start
+  1. pnpm turbo build --filter=backend --filter=frontend
+  2. ตรวจ apps/backend/data/tiwa.db
+     ถ้าไม่มี → prisma db push + prisma db seed
+  3. Spawn backend (detached, node dist/main.js)
+  4. Spawn frontend (detached, next start)
+  5. บันทึก PID → ~/.tiwa/state.json
+  6. เปิด browser → http://localhost:<frontend-port>
+```
+
+### Config Schema (Zod-validated)
+
+```yaml
+# ~/.tiwa/config.yml
+orchestrator:
+  url: "http://localhost:6769"
+  timeout: 30000
+backend:
+  port: 6769
+  host: "0.0.0.0"
+  logLevel: "info"
+frontend:
+  port: 6768
+worker:
+  port: 6770
+  host: "0.0.0.0"
+  backendUrl: "http://localhost:6769"
+  heartbeatInterval: 3000
+  cliProvider: "claude"         # 'claude' | 'codex' — default CLI tool
+  cliTimeout: 300000            # 5 minutes timeout per task
+  cliWorkDir: ""                # default working directory (empty = cwd)
+projects:
+  defaultPath: "~/tiwa-projects"
+```
+
+---
+
+## 9. Database & Storage
+
+### SQLite (Prisma ORM)
+
+```
+apps/backend/data/tiwa.db
+```
+
+**ทำไมใช้ SQLite แทน PostgreSQL?**
+- ไม่ต้องติดตั้ง database server แยก
+- `tiwa start` สร้าง DB อัตโนมัติ
+- Portable — ย้ายไฟล์เดียวได้ทั้ง database
+- เหมาะกับ single-user development tool
+
+### Schema
+
+```prisma
+model Agent {
+  id            String    @id @default(cuid())
+  name          String                          // "Siam", "Nara", etc.
+  role          String    @default("backend")   // backend, frontend, qa, devops, reviewer, planner
+  status        String    @default("idle")      // idle, busy, working, thinking, error, offline
+  model         String    @default("claude-sonnet-4-20250514")
+  department    String    @default("backend")
+  task          String?                         // Current task description
+  displayConfig String    @default("{}")        // JSON: avatar, color theme
+  stats         String    @default("{}")        // JSON: tasks count, success rate
+  configJson    String    @default("{}")        // JSON: systemPrompt
+  tasks         Task[]
+}
+
+model Task {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+  type            String    @default("code")     // code, test, review, deploy, plan, fix
+  status          String    @default("pending")  // pending, queued, in_progress, review, completed, failed, cancelled
+  priority        String    @default("medium")   // low, medium, high, critical
+  assignedAgent   Agent?    @relation(...)
+  project         Project?  @relation(...)
+  workflow        Workflow? @relation(...)
+  resultJson      String?                        // JSON: AI response content, model, usage
+  error           String?
+}
+
+model Project {
+  id            String     @id @default(cuid())
+  name          String     @unique
+  gitRepoJson   String     @default("{}")        // JSON: url, branch
+  metadataJson  String     @default("{}")
+  tasks         Task[]
+  workflows     Workflow[]
+}
+
+model Workflow {
+  id               String    @id @default(cuid())
+  name             String
+  projectId        String
+  stepsJson        String    @default("[]")      // JSON: step definitions
+  currentStepIndex Int       @default(0)
+  tasks            Task[]
+}
+```
+
+> **หมายเหตุ:** JSON fields เก็บเป็น `String` (ไม่ใช่ `Json` type) เพราะ SQLite ไม่มี native JSON column
+> Services ทำ `JSON.stringify()` ตอนเขียน และ `JSON.parse()` ตอนอ่าน อัตโนมัติ
+
+### JSON File Storage (แทน MongoDB)
+
+| ไฟล์ | หน้าที่ | Limit |
+|------|---------|-------|
+| `data/logs.json` | Activity logs (agent actions, errors) | 10,000 → prune เหลือ 5,000 |
+| `data/chat-messages.json` | Chat history (room-based) | ไม่จำกัด |
+| `data/settings.json` | API keys, provider config, defaults | - |
+
+**ทำไมใช้ JSON file แทน MongoDB?**
+- ไม่ต้องรัน MongoDB server
+- เปิดดูด้วย text editor ได้
+- ลบไฟล์ = ล้างข้อมูล (ง่ายมาก)
+
+---
+
+## 10. Data Flow — ข้อมูลไหลอย่างไร
+
+### Task Execution Flow
+
+```
+┌──────────┐     POST /api/orchestrator/submit
+│ Frontend │ ────────────────────────────────────┐
+│ (React)  │                                     │
+└──────────┘                                     ▼
+     ▲                                    ┌──────────────┐
+     │ WebSocket                          │   Backend    │
+     │ (task:update,                      │  (NestJS)    │
+     │  agent:status)                     └──────┬───────┘
+     │                                           │
+     │                                    1. Create Task (status=queued)
+     │                                    2. Emit task:update via WS
+     │                                    3. Add to InProcessQueue
+     │                                           │
+     │                                           ▼
+     │                                    ┌──────────────┐
+     │                                    │   Queue      │
+     │                                    │ (in-process) │
+     │                                    └──────┬───────┘
+     │                                           │
+     │                                    4. Pop task, call executeTask()
+     │                                           │
+     │                                           ▼
+     │                                    ┌──────────────┐
+     │                                    │ Orchestrator │
+     │                                    └──────┬───────┘
+     │                                           │
+     │                              5. Select agent (role-based)
+     │                              6. Set agent status=working
+     │                                           │
+     │                              ┌────────────┴────────────┐
+     │                              │                         │
+     │                     Worker available?           No worker?
+     │                              │                         │
+     │                              ▼                         ▼
+     │                     ┌──────────────┐          ┌──────────────┐
+     │                     │    Worker    │          │ AI Provider  │
+     │                     │  (CLI mode) │          │ (API fallback│
+     │                     └──────┬───────┘          └──────┬───────┘
+     │                            │                         │
+     │                  7a. POST /agent/assign       7b. Build prompt
+     │                  8a. Spawn CLI:               8b. Call LLM API
+     │                      claude -p "..."          9b. Get response
+     │                      codex -q "..."                  │
+     │                  9a. Capture output                   │
+     │                  10a. POST /worker-result             │
+     │                            │                         │
+     │                            └────────────┬────────────┘
+     │                                         │
+     │                              11. Save resultJson to task
+     │                              12. Set agent status=idle
+     └──────────────────────────── 13. Emit task:update + agent:status
+```
+
+> **Worker CLI mode (ทางซ้าย):** Worker spawn `claude` หรือ `codex` CLI โดยตรง — ไม่ต้องยิง API
+> **API fallback (ทางขวา):** ถ้าไม่มี worker connected → ใช้ AI SDK เดิม (Anthropic/OpenAI/Gemini)
+
+### Real-time Update Flow
+
+```
+Backend เกิด event
+  → EventsGateway.emit('task:update', data)
+  → Socket.IO broadcast ไปทุก client
+  → Frontend useSocket hook รับ event
+  → Invalidate React Query cache
+  → Component re-render ด้วยข้อมูลใหม่
+```
+
+### Worker Heartbeat Flow
+
+```
+Worker (ทุก 3 วินาที)
+  → POST /api/workers/heartbeat
+  → Backend: บันทึก/อัพเดทใน worker registry
+  → Emit worker:update ผ่าน WebSocket
+  → Frontend: แสดง connected workers
+
+ถ้า worker ไม่ส่ง heartbeat 10 วินาที
+  → Backend: mark worker offline
+  → ลบออกจาก registry
+```
+
+---
+
+## 11. AI Execution System
+
+### Execution Modes (2 ทาง)
+
+| Mode | เมื่อใช้ | วิธีทำงาน |
+|------|---------|-----------|
+| **CLI Mode** (primary) | มี Worker connected | Worker spawn `claude` / `codex` CLI โดยตรง |
+| **API Mode** (fallback) | ไม่มี Worker | Backend เรียก AI SDK (Anthropic/OpenAI/Gemini) |
+
+### CLI Mode — Claude Code & Codex CLI
+
+| CLI Tool | Command | Features |
+|----------|---------|----------|
+| **Claude Code** | `claude -p "prompt" --output-format text --verbose` | Multi-step reasoning, file editing, shell commands |
+| **Codex** | `codex -q "prompt" --full-auto` | Code generation, auto-approve file changes |
+
+**ข้อดีของ CLI mode:**
+- ไม่ต้อง manage API keys — CLI จัดการ credentials เอง
+- Built-in tool use (อ่าน/เขียนไฟล์, รัน commands)
+- Multi-step reasoning ในตัว (ซับซ้อนกว่า single API call)
+
+**Config:**
+```yaml
+# ~/.tiwa/config.yml
+worker:
+  cliProvider: claude    # 'claude' | 'codex'
+  cliTimeout: 300000     # 5 min timeout
+  cliWorkDir: ""         # project directory for CLI
+```
+
+### API Mode — Fallback Providers
+
+| Provider | SDK | Models | Auth |
+|----------|-----|--------|------|
+| Anthropic | `@anthropic-ai/sdk` | claude-sonnet-4, claude-opus-4, claude-haiku-3.5 | API Key |
+| OpenAI | `openai` | gpt-4o, gpt-4-turbo, gpt-3.5-turbo | API Key |
+| Google Gemini | `@google/genai` | gemini-2.0-flash, gemini-pro | API Key / OAuth / Service Account |
+
+### Provider Detection (API mode)
+
+```typescript
+// model name → provider
+"claude-*"  → anthropic
+"gpt-*"     → openai
+"gemini-*"  → gemini
+```
+
+### Auth Priority (API mode)
+
+```
+1. SettingsService (data/settings.json) — ตั้งค่าผ่าน Web UI
+2. Environment Variables — ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
+```
+
+### Google Gemini Auth Methods
+
+1. **API Key** — ง่ายที่สุด ใส่ key ใน Settings page
+2. **Service Account** — อัพโหลด JSON file ผ่าน Web UI
+3. **OAuth 2.0** — Login with Google ผ่าน browser flow
+
+---
+
+## 12. Development Workflow
+
+### Prerequisites
+
+- Node.js 20+
+- pnpm 10+
+
+**ไม่ต้องติดตั้ง:** PostgreSQL, MongoDB, Redis, Docker
+
+### Quick Start
+
+```bash
+# Clone & install
+git clone <repo-url> && cd tiwa
 pnpm install
 
-# 3. ตั้งค่า environment
-cp .env.example .env
+# Start ทุกอย่าง (build + init DB + start services)
+npx tiwa start
 
-# 4. เปิด databases
-pnpm docker:dev
-
-# 5. (ครั้งแรก) สร้าง database tables
-pnpm db:migrate
-
-# 6. เริ่ม dev server ทุก app
+# หรือ dev mode (hot reload)
 pnpm dev
 ```
 
-### คำสั่งที่ใช้บ่อย
+### Development Commands
 
 ```bash
-# Development
-pnpm dev                    # เริ่มทุก app (backend + frontend + worker)
-pnpm docker:dev             # เปิด databases
-pnpm docker:dev:down        # ปิด databases
-pnpm docker:dev:logs        # ดู database logs
+pnpm dev              # Start ทุก app ใน dev mode (turbo)
+pnpm build            # Build ทุก app
+pnpm clean            # ลบ dist/ ทั้งหมด
 
-# Build & Test
-pnpm build                  # build ทุก package
-pnpm lint                   # lint ทุก package
-pnpm test                   # test ทุก package
+# CLI
+npx tiwa start        # Build + start production mode
+npx tiwa stop         # Stop ทุก service
+npx tiwa restart      # Rebuild + restart
+npx tiwa status       # ดู status ทั้งระบบ
+npx tiwa worker start # Start worker
 
 # Database
-pnpm db:migrate             # สร้าง/อัพเดท tables
-pnpm db:studio              # เปิด GUI ดู database
-
-# รัน app เดียว
-pnpm --filter backend dev   # เฉพาะ backend
-pnpm --filter frontend dev  # เฉพาะ frontend
-pnpm --filter worker dev    # เฉพาะ worker
-
-# Production
-pnpm docker:prod            # build + deploy ทุก service
-pnpm docker:prod:down       # ปิดทุก service
+cd apps/backend
+npx prisma db push    # Sync schema → SQLite
+npx prisma db seed    # Seed sample data
+npx prisma studio     # GUI สำหรับดู/แก้ database
 ```
 
-### Git Branching
+### Port Allocation
 
-```
-main                ← production-ready
-└── dev             ← development branch
-    ├── feature/xxx ← feature branches
-    └── fix/xxx     ← bug fix branches
-```
+| Service | Dev Port | CLI Config Port |
+|---------|----------|-----------------|
+| Backend | 4001 | 6769 |
+| Frontend | 4000 | 6768 |
+| Worker | 6770 | 6770 |
+
+> CLI ใช้ port จาก `~/.tiwa/config.yml` — สามารถเปลี่ยนได้ด้วย `tiwa config set`
+
+### Tech Stack Summary
+
+| Layer | Technology |
+|-------|-----------|
+| Runtime | Node.js 20+ |
+| Package Manager | pnpm 10+ |
+| Monorepo | Turborepo |
+| Backend Framework | NestJS 11 |
+| ORM | Prisma 6 |
+| Database | SQLite |
+| Frontend Framework | Next.js 15 + React 19 |
+| Styling | Tailwind CSS 4 |
+| State Management | Zustand + TanStack Query |
+| Real-time | Socket.IO |
+| AI SDKs | @anthropic-ai/sdk, openai, @google/genai |
+| CLI Framework | oclif v4 |
+| Validation | Zod, class-validator |
+
+### Architecture Principles
+
+1. **Self-Contained** — ไม่พึ่ง external services, `tiwa start` แล้วใช้ได้เลย
+2. **CLI Execution** — Worker ใช้ Claude Code CLI / Codex CLI โดยตรง ไม่ต้องยิง API
+3. **Graceful Fallback** — ถ้าไม่มี Worker → fallback ไป AI API อัตโนมัติ
+4. **Modular** — แต่ละ domain แยก module ชัดเจน
+5. **Event-Driven** — WebSocket สำหรับ real-time updates ทุกอย่าง
+6. **Provider Agnostic** — รองรับหลาย AI provider/CLI tools, สลับได้
+7. **File-Based Storage** — SQLite + JSON files, ลบไฟล์ = ล้างข้อมูล
+8. **CLI-First** — ทุกอย่างควบคุมผ่าน `tiwa` command

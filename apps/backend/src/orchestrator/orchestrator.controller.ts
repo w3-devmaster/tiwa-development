@@ -6,14 +6,12 @@ import {
   Body,
   Logger,
   HttpCode,
-  Inject,
 } from '@nestjs/common';
 import { OrchestratorService } from './orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { Queue } from 'bullmq';
-import { InjectQueue } from '@nestjs/bullmq';
+import { InProcessQueueService } from '../queue/in-process-queue.service';
+import { IsString, IsOptional, IsEnum, IsNumber } from 'class-validator';
 
 class SubmitTaskDto {
   @IsString()
@@ -38,6 +36,33 @@ class SubmitTaskDto {
   projectId?: string;
 }
 
+class WorkerResultDto {
+  @IsString()
+  workerId: string;
+
+  @IsString()
+  taskId: string;
+
+  @IsString()
+  @IsEnum(['completed', 'failed'])
+  status: string;
+
+  @IsString()
+  content: string;
+
+  @IsString()
+  @IsOptional()
+  error?: string;
+
+  @IsString()
+  @IsOptional()
+  provider?: string;
+
+  @IsNumber()
+  @IsOptional()
+  durationMs?: number;
+}
+
 @Controller('api/orchestrator')
 export class OrchestratorController {
   private readonly logger = new Logger(OrchestratorController.name);
@@ -46,7 +71,7 @@ export class OrchestratorController {
     private orchestrator: OrchestratorService,
     private prisma: PrismaService,
     private events: EventsGateway,
-    @InjectQueue('task-execution') private taskQueue: Queue,
+    private inProcessQueue: InProcessQueueService,
   ) {}
 
   @Post('submit')
@@ -66,7 +91,7 @@ export class OrchestratorController {
       include: { assignedAgent: true },
     });
 
-    await this.taskQueue.add('execute', { taskId: task.id });
+    await this.inProcessQueue.add(task.id);
     this.events.emitTaskUpdate(task);
 
     this.logger.log(`Task "${task.title}" queued as ${task.id}`);
@@ -77,6 +102,21 @@ export class OrchestratorController {
   async execute(@Param('taskId') taskId: string) {
     this.logger.log(`Manually executing task: ${taskId}`);
     return this.orchestrator.executeTask(taskId);
+  }
+
+  @Post('worker-result')
+  @HttpCode(200)
+  async workerResult(@Body() dto: WorkerResultDto) {
+    this.logger.log(`Worker result received for task ${dto.taskId}: ${dto.status}`);
+    return this.orchestrator.handleWorkerResult({
+      workerId: dto.workerId,
+      taskId: dto.taskId,
+      status: dto.status as 'completed' | 'failed',
+      content: dto.content,
+      error: dto.error,
+      provider: dto.provider || 'unknown',
+      durationMs: dto.durationMs || 0,
+    });
   }
 
   @Get('status')

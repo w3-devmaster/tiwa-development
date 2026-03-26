@@ -7,11 +7,18 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 export class ProjectsService {
   constructor(private prisma: PrismaService) {}
 
+  private parseJsonFields(project: any) {
+    if (!project) return project;
+    const parse = (v: any) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return v; } };
+    return { ...project, gitRepoJson: parse(project.gitRepoJson), metadataJson: parse(project.metadataJson) };
+  }
+
   async findAll() {
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       include: { _count: { select: { tasks: true, workflows: true } } },
       orderBy: { updatedAt: 'desc' },
     });
+    return projects.map((p) => this.parseJsonFields(p));
   }
 
   async findOne(id: string) {
@@ -23,7 +30,7 @@ export class ProjectsService {
       },
     });
     if (!project) throw new NotFoundException(`Project ${id} not found`);
-    return project;
+    return this.parseJsonFields(project);
   }
 
   async create(dto: CreateProjectDto) {
@@ -32,14 +39,17 @@ export class ProjectsService {
         name: dto.name,
         description: dto.description,
         workspacePath: dto.workspacePath,
-        gitRepoJson: (dto.gitRepoJson || {}) as any,
+        gitRepoJson: JSON.stringify(dto.gitRepoJson || {}),
       },
     });
   }
 
   async update(id: string, dto: UpdateProjectDto) {
     await this.findOne(id);
-    return this.prisma.project.update({ where: { id }, data: dto as any });
+    const data: Record<string, unknown> = { ...dto };
+    if (dto.gitRepoJson !== undefined) data.gitRepoJson = JSON.stringify(dto.gitRepoJson);
+    if (dto.metadataJson !== undefined) data.metadataJson = JSON.stringify(dto.metadataJson);
+    return this.prisma.project.update({ where: { id }, data });
   }
 
   async remove(id: string) {

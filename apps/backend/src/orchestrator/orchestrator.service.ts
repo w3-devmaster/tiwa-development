@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviderService } from '../ai-provider/ai-provider.service';
 import { EventsGateway } from '../events/events.gateway';
+import { WorkersService } from '../workers/workers.service';
 
 const ROLE_MAP: Record<string, string[]> = {
   code: ['backend', 'frontend'],
@@ -43,6 +44,7 @@ export class OrchestratorService {
     private prisma: PrismaService,
     private aiProvider: AiProviderService,
     private events: EventsGateway,
+    private workersService: WorkersService,
   ) {}
 
   async executeTask(taskId: string): Promise<ExecutionResult> {
@@ -86,15 +88,29 @@ export class OrchestratorService {
     this.events.emitTaskUpdate({ id: taskId, status: 'in_progress', assignedAgentId: agent.id });
 
     try {
-      // Build prompt
+      // Check if a worker with CLI tools is available
+      const worker = this.getAvailableWorker();
+      if (worker) {
+        this.logger.log(
+          `Dispatching task "${task.title}" to worker ${worker.id} (CLI mode)`,
+        );
+        await this.dispatchToWorker(worker, task, agent);
+        return {
+          taskId,
+          agentId: agent.id,
+          status: 'completed',
+          content: `Dispatched to worker ${worker.id} for CLI execution`,
+        };
+      }
+
+      // Fallback: use AI API directly
       const systemPrompt = this.buildSystemPrompt(agent);
       const userMessage = this.buildUserMessage(task);
 
       this.logger.log(
-        `Executing task "${task.title}" with agent ${agent.name} (${agent.model})`,
+        `Executing task "${task.title}" with agent ${agent.name} (${agent.model}) via API`,
       );
 
-      // Call AI
       const response = await this.aiProvider.chat({
         model: agent.model,
         systemPrompt,
@@ -108,13 +124,14 @@ export class OrchestratorService {
         data: {
           status: 'completed',
           completedAt: new Date(),
-          resultJson: {
+          resultJson: JSON.stringify({
             content: response.content,
             model: response.model,
             provider: response.provider,
             usage: response.usage,
             finishReason: response.finishReason,
-          },
+            executionMode: 'api',
+          }),
         },
         include: { assignedAgent: true },
       });
@@ -128,7 +145,7 @@ export class OrchestratorService {
       this.events.emitTaskUpdate(updatedTask);
       this.events.emitAgentStatus({ id: agent.id, status: 'idle', task: null });
 
-      this.logger.log(`Task "${task.title}" completed successfully`);
+      this.logger.log(`Task "${task.title}" completed successfully via API`);
 
       return {
         taskId,
@@ -224,7 +241,8 @@ export class OrchestratorService {
   }
 
   private buildSystemPrompt(agent: any): string {
-    const config = (agent.configJson || {}) as Record<string, any>;
+    const raw = agent.configJson || '{}';
+    const config = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, any>;
     if (config.systemPrompt) return config.systemPrompt;
     return (
       DEFAULT_SYSTEM_PROMPTS[agent.role] ||
@@ -252,6 +270,109 @@ export class OrchestratorService {
     );
 
     return parts.join('\n');
+  }
+
+  // ========== Worker CLI Integration ==========
+
+  private getAvailableWorker(): { id: string; host: string; port: number } | null {
+    const workers = this.workersService.getWorkers();
+    // Find an active/idle worker
+    const available = workers.find((w) => w.status === 'idle' || w.status === 'active');
+    return available ? { id: available.id, host: available.host, port: available.port } : null;
+  }
+
+  private async dispatchToWorker(
+    worker: { id: string; host: string; port: number },
+    task: any,
+    agent: any,
+  ): Promise<void> {
+    const url = `http://${worker.host}:${worker.port}/agent/assign`;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: task.id,
+          type: task.type,
+          title: task.title,
+          description: task.description,
+          agentRole: agent.role,
+          priority: task.priority,
+          projectPath: task.project?.path,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (err) {
+      this.logger.error(`Failed to dispatch to worker ${worker.id}: ${err}`);
+      throw new Error(`Worker dispatch failed: ${(err as Error).message}`);
+    }
+  }
+
+  async handleWorkerResult(result: {
+    workerId: string;
+    taskId: string;
+    status: 'completed' | 'failed';
+    content: string;
+    error?: string;
+    provider: string;
+    durationMs: number;
+  }): Promise<{ success: boolean }> {
+    const task = await this.prisma.task.findUnique({
+      where: { id: result.taskId },
+      include: { assignedAgent: true },
+    });
+    if (!task) {
+      this.logger.warn(`Worker result for unknown task: ${result.taskId}`);
+      return { success: false };
+    }
+
+    if (result.status === 'completed') {
+      const updatedTask = await this.prisma.task.update({
+        where: { id: result.taskId },
+        data: {
+          status: 'completed',
+          completedAt: new Date(),
+          resultJson: JSON.stringify({
+            content: result.content,
+            provider: result.provider,
+            executionMode: 'cli',
+            durationMs: result.durationMs,
+            workerId: result.workerId,
+          }),
+        },
+        include: { assignedAgent: true },
+      });
+      this.events.emitTaskUpdate(updatedTask);
+      this.logger.log(`Task "${task.title}" completed via worker ${result.workerId} (${result.provider} CLI)`);
+    } else {
+      const updatedTask = await this.prisma.task.update({
+        where: { id: result.taskId },
+        data: {
+          status: 'failed',
+          error: result.error,
+          completedAt: new Date(),
+          retryCount: { increment: 1 },
+        },
+        include: { assignedAgent: true },
+      });
+      this.events.emitTaskUpdate(updatedTask);
+      this.logger.error(`Task "${task.title}" failed via worker: ${result.error}`);
+    }
+
+    // Reset assigned agent to idle
+    if (task.assignedAgent) {
+      await this.prisma.agent.update({
+        where: { id: task.assignedAgent.id },
+        data: { status: 'idle', task: null, lastActiveAt: new Date() },
+      });
+      this.events.emitAgentStatus({
+        id: task.assignedAgent.id,
+        status: 'idle',
+        task: null,
+      });
+    }
+
+    return { success: true };
   }
 
   async getStatus() {

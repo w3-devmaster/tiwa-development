@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { OrchestratorService } from './orchestrator.service';
 import { OrchestratorController } from './orchestrator.controller';
+import { WorkersModule } from '../workers/workers.module';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: 'task-execution' })],
+  imports: [WorkersModule],
   controllers: [OrchestratorController],
   providers: [OrchestratorService],
   exports: [OrchestratorService],

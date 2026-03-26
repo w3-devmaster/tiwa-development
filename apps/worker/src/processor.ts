@@ -1,50 +1,126 @@
-import { Job } from 'bullmq';
+import { executeWithCli, type CliProvider, type CliExecutionResult } from './cli-executor.js';
+import type { CliAvailability } from './cli-detector.js';
 
 export interface TaskJobData {
   taskId: string;
   type: string;
-  payload: Record<string, unknown>;
+  title: string;
+  description?: string;
+  projectPath?: string;
+  provider?: CliProvider;
+  agentRole?: string;
+  priority?: string;
 }
 
-export async function processJob(job: Job<TaskJobData>): Promise<unknown> {
-  const { taskId, type, payload } = job.data;
+export interface TaskResult {
+  taskId: string;
+  status: 'completed' | 'failed';
+  content: string;
+  error?: string;
+  provider: CliProvider;
+  durationMs: number;
+}
 
-  console.log(`Processing job ${job.id} — task: ${taskId}, type: ${type}`);
+// Role-specific prompt prefixes
+const ROLE_PROMPTS: Record<string, string> = {
+  planner: 'You are an AI project planner. Analyze requirements and create actionable plans.',
+  backend: 'You are an expert backend engineer (Node.js, NestJS, TypeScript, databases).',
+  frontend: 'You are an expert frontend engineer (React, Next.js, TypeScript, CSS).',
+  qa: 'You are a QA engineer. Write thorough tests and identify edge cases.',
+  devops: 'You are a DevOps engineer (CI/CD, Docker, Kubernetes, cloud infrastructure).',
+  reviewer: 'You are a senior code reviewer. Review for correctness, security, and performance.',
+};
 
-  switch (type) {
-    case 'code':
-      return handleCodeTask(taskId, payload);
-    case 'test':
-      return handleTestTask(taskId, payload);
-    case 'review':
-      return handleReviewTask(taskId, payload);
-    case 'deploy':
-      return handleDeployTask(taskId, payload);
-    default:
-      throw new Error(`Unknown task type: ${type}`);
+// Task-type prompt templates
+const TASK_PROMPTS: Record<string, (title: string, desc?: string) => string> = {
+  code: (t, d) => `Implement the following:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nProvide complete, working code.`,
+  test: (t, d) => `Write comprehensive tests for:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nCover edge cases and error scenarios.`,
+  review: (t, d) => `Review the following code/feature:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nProvide specific, actionable feedback.`,
+  plan: (t, d) => `Create a detailed implementation plan for:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nInclude steps, dependencies, and complexity estimates.`,
+  fix: (t, d) => `Fix the following issue:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nDiagnose the root cause and provide a fix.`,
+  deploy: (t, d) => `Create deployment configuration for:\n\n## ${t}${d ? `\n\n${d}` : ''}\n\nProvide complete configuration files.`,
+};
+
+function buildPrompt(data: TaskJobData): string {
+  const parts: string[] = [];
+
+  // Add role context
+  if (data.agentRole && ROLE_PROMPTS[data.agentRole]) {
+    parts.push(ROLE_PROMPTS[data.agentRole]);
+    parts.push('');
   }
+
+  // Add task-specific prompt
+  const template = TASK_PROMPTS[data.type] || TASK_PROMPTS['code'];
+  parts.push(template(data.title, data.description));
+
+  if (data.priority && data.priority !== 'medium') {
+    parts.push(`\nPriority: ${data.priority}`);
+  }
+
+  return parts.join('\n');
 }
 
-async function handleCodeTask(taskId: string, _payload: Record<string, unknown>) {
-  console.log(`[CODE] Executing code task: ${taskId}`);
-  // TODO: Implement code generation/modification via AI agent
-  return { status: 'completed', taskId };
+function selectProvider(
+  requested?: CliProvider,
+  defaultProvider?: string,
+  cliTools?: CliAvailability,
+): CliProvider {
+  // 1. Use explicitly requested provider
+  if (requested === 'claude' || requested === 'codex') return requested;
+
+  // 2. Use default from config
+  if (defaultProvider === 'claude' || defaultProvider === 'codex') return defaultProvider as CliProvider;
+
+  // 3. Auto-detect: prefer claude, fallback to codex
+  if (cliTools) {
+    if (cliTools.claude.available) return 'claude';
+    if (cliTools.codex.available) return 'codex';
+  }
+
+  // 4. Default to claude
+  return 'claude';
 }
 
-async function handleTestTask(taskId: string, _payload: Record<string, unknown>) {
-  console.log(`[TEST] Executing test task: ${taskId}`);
-  // TODO: Implement test execution
-  return { status: 'completed', taskId };
-}
+export async function processTask(
+  data: TaskJobData,
+  cliTools?: CliAvailability,
+): Promise<TaskResult> {
+  const defaultProvider = process.env.DEFAULT_CLI_PROVIDER;
+  const timeout = parseInt(process.env.CLI_TIMEOUT || '300000', 10);
+  const workDir = data.projectPath || process.env.CLI_WORK_DIR || process.cwd();
 
-async function handleReviewTask(taskId: string, _payload: Record<string, unknown>) {
-  console.log(`[REVIEW] Executing review task: ${taskId}`);
-  // TODO: Implement AI code review
-  return { status: 'completed', taskId };
-}
+  const provider = selectProvider(data.provider, defaultProvider, cliTools);
+  const prompt = buildPrompt(data);
 
-async function handleDeployTask(taskId: string, _payload: Record<string, unknown>) {
-  console.log(`[DEPLOY] Executing deploy task: ${taskId}`);
-  // TODO: Implement deployment
-  return { status: 'completed', taskId };
+  console.log(`[Task ${data.taskId}] Executing with ${provider} CLI (type: ${data.type})`);
+  console.log(`[Task ${data.taskId}] Work dir: ${workDir}`);
+
+  const result: CliExecutionResult = await executeWithCli({
+    provider,
+    prompt,
+    workDir,
+    timeout,
+  });
+
+  console.log(`[Task ${data.taskId}] Finished in ${result.durationMs}ms (exit: ${result.exitCode})`);
+
+  if (result.exitCode !== 0 || result.error) {
+    return {
+      taskId: data.taskId,
+      status: 'failed',
+      content: result.content,
+      error: result.error || `CLI exited with code ${result.exitCode}`,
+      provider,
+      durationMs: result.durationMs,
+    };
+  }
+
+  return {
+    taskId: data.taskId,
+    status: 'completed',
+    content: result.content,
+    provider,
+    durationMs: result.durationMs,
+  };
 }

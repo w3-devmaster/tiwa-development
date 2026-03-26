@@ -11,9 +11,16 @@ export class AgentsService {
     private events: EventsGateway,
   ) {}
 
+  private parseJsonFields(agent: any) {
+    if (!agent) return agent;
+    const parse = (v: any) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return v; } };
+    return { ...agent, displayConfig: parse(agent.displayConfig), stats: parse(agent.stats), configJson: parse(agent.configJson) };
+  }
+
   async findAll(status?: string) {
     const where = status ? { status } : {};
-    return this.prisma.agent.findMany({ where, orderBy: { createdAt: 'desc' } });
+    const agents = await this.prisma.agent.findMany({ where, orderBy: { createdAt: 'desc' } });
+    return agents.map((a) => this.parseJsonFields(a));
   }
 
   async findOne(id: string) {
@@ -22,7 +29,7 @@ export class AgentsService {
       include: { tasks: { take: 10, orderBy: { updatedAt: 'desc' } } },
     });
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
-    return agent;
+    return this.parseJsonFields(agent);
   }
 
   async create(dto: CreateAgentDto) {
@@ -33,9 +40,9 @@ export class AgentsService {
         model: dto.model || 'claude-sonnet-4-20250514',
         department: dto.department || 'backend',
         task: dto.task,
-        displayConfig: (dto.displayConfig || {}) as any,
-        stats: (dto.stats || { tasks: 0, success: '0%', avgTime: '0m', tokPerMin: 0 }) as any,
-        configJson: (dto.configJson || {}) as any,
+        displayConfig: JSON.stringify(dto.displayConfig || {}),
+        stats: JSON.stringify(dto.stats || { tasks: 0, success: '0%', avgTime: '0m', tokPerMin: 0 }),
+        configJson: JSON.stringify(dto.configJson || {}),
       },
     });
   }
@@ -52,9 +59,9 @@ export class AgentsService {
       data.status = dto.status;
       data.lastActiveAt = new Date();
     }
-    if (dto.displayConfig !== undefined) data.displayConfig = dto.displayConfig;
-    if (dto.stats !== undefined) data.stats = dto.stats;
-    if (dto.configJson !== undefined) data.configJson = dto.configJson;
+    if (dto.displayConfig !== undefined) data.displayConfig = JSON.stringify(dto.displayConfig);
+    if (dto.stats !== undefined) data.stats = JSON.stringify(dto.stats);
+    if (dto.configJson !== undefined) data.configJson = JSON.stringify(dto.configJson);
 
     const updated = await this.prisma.agent.update({ where: { id }, data });
     this.events.emitAgentStatus(updated);

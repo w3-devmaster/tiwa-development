@@ -1,8 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
+import { InProcessQueueService } from '../queue/in-process-queue.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
@@ -13,8 +12,20 @@ export class TasksService {
   constructor(
     private prisma: PrismaService,
     private events: EventsGateway,
-    @InjectQueue('task-execution') private taskQueue: Queue,
+    private inProcessQueue: InProcessQueueService,
   ) {}
+
+  private parseJsonFields(task: any) {
+    if (!task) return task;
+    try {
+      if (typeof task.resultJson === 'string') task = { ...task, resultJson: JSON.parse(task.resultJson) };
+    } catch { /* keep as-is */ }
+    if (task.assignedAgent) {
+      const parse = (v: any) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return v; } };
+      task = { ...task, assignedAgent: { ...task.assignedAgent, displayConfig: parse(task.assignedAgent.displayConfig), stats: parse(task.assignedAgent.stats), configJson: parse(task.assignedAgent.configJson) } };
+    }
+    return task;
+  }
 
   async findAll(filters?: {
     status?: string;
@@ -26,11 +37,12 @@ export class TasksService {
     if (filters?.projectId) where.projectId = filters.projectId;
     if (filters?.assignedAgentId) where.assignedAgentId = filters.assignedAgentId;
 
-    return this.prisma.task.findMany({
+    const tasks = await this.prisma.task.findMany({
       where,
       include: { assignedAgent: true },
       orderBy: { updatedAt: 'desc' },
     });
+    return tasks.map((t) => this.parseJsonFields(t));
   }
 
   async findOne(id: string) {
@@ -39,7 +51,7 @@ export class TasksService {
       include: { assignedAgent: true, project: true, workflow: true },
     });
     if (!task) throw new NotFoundException(`Task ${id} not found`);
-    return task;
+    return this.parseJsonFields(task);
   }
 
   async create(dto: CreateTaskDto) {
@@ -85,15 +97,15 @@ export class TasksService {
     });
 
     // Emit real-time update
-    this.events.emitTaskUpdate(updated);
+    this.events.emitTaskUpdate(this.parseJsonFields(updated));
 
     // Auto-queue for execution when status becomes 'queued'
     if (dto.status === 'queued') {
       this.logger.log(`Task "${updated.title}" queued for execution`);
-      await this.taskQueue.add('execute', { taskId: id });
+      await this.inProcessQueue.add(id);
     }
 
-    return updated;
+    return this.parseJsonFields(updated);
   }
 
   async remove(id: string) {
@@ -109,11 +121,12 @@ export class TasksService {
       include: { assignedAgent: true },
       orderBy: { updatedAt: 'desc' },
     });
+    const parsed = tasks.map((t) => this.parseJsonFields(t));
     return {
-      todo: tasks.filter((t) => t.status === 'pending' || t.status === 'queued'),
-      in_progress: tasks.filter((t) => t.status === 'in_progress'),
-      review: tasks.filter((t) => t.status === 'review'),
-      done: tasks.filter((t) =>
+      todo: parsed.filter((t) => t.status === 'pending' || t.status === 'queued'),
+      in_progress: parsed.filter((t) => t.status === 'in_progress'),
+      review: parsed.filter((t) => t.status === 'review'),
+      done: parsed.filter((t) =>
         ['completed', 'failed', 'cancelled'].includes(t.status),
       ),
     };

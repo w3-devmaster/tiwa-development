@@ -18,6 +18,9 @@ export const TiwaConfigSchema = z.object({
     host: z.string().default('0.0.0.0'),
     backendUrl: z.string().default('http://localhost:6769'),
     heartbeatInterval: z.number().default(3000),
+    cliProvider: z.enum(['claude', 'codex']).default('claude'),
+    cliTimeout: z.number().default(300000),
+    cliWorkDir: z.string().default(''),
   }).default({}),
   projects: z.object({
     defaultPath: z.string().default('~/tiwa-projects'),

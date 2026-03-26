@@ -3,87 +3,26 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-// === Enums ===
-
-enum AgentRole {
-  planner
-  backend
-  frontend
-  qa
-  devops
-  reviewer
-}
-
-enum AgentStatus {
-  idle
-  busy
-  working
-  thinking
-  error
-  offline
-}
-
-enum TaskType {
-  code
-  test
-  review
-  deploy
-  plan
-  fix
-}
-
-enum TaskStatus {
-  pending
-  queued
-  in_progress
-  review
-  completed
-  failed
-  cancelled
-}
-
-enum TaskPriority {
-  low
-  medium
-  high
-  critical
-}
-
-enum ProjectStatus {
-  active
-  archived
-  paused
-}
-
-enum WorkflowStatus {
-  pending
-  running
-  paused
-  completed
-  failed
-  cancelled
 }
 
 // === Models ===
 
 model Agent {
-  id            String      @id @default(cuid())
+  id            String    @id @default(cuid())
   name          String
-  role          String      @default("backend")
-  status        String      @default("idle")
-  model         String      @default("claude-sonnet-4-20250514")
-  department    String      @default("backend")
+  role          String    @default("backend")
+  status        String    @default("idle")
+  model         String    @default("claude-sonnet-4-20250514")
+  department    String    @default("backend")
   task          String?
-  displayConfig Json        @default("{}")
-  stats         Json        @default("{}")
-  configJson    Json        @default("{}")
+  displayConfig String    @default("{}")
+  stats         String    @default("{}")
+  configJson    String    @default("{}")
   lastActiveAt  DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   tasks         Task[]
 
   @@map("agents")
@@ -106,7 +45,7 @@ model Task {
   branch          String?
   retryCount      Int       @default(0)
   maxRetries      Int       @default(3)
-  resultJson      Json?
+  resultJson      String?
   error           String?
   startedAt       DateTime?
   completedAt     DateTime?
@@ -117,15 +56,15 @@ model Task {
 }
 
 model Project {
-  id            String   @id @default(cuid())
-  name          String   @unique
+  id            String     @id @default(cuid())
+  name          String     @unique
   description   String?
-  status        String   @default("active")
-  gitRepoJson   Json     @default("{}")
+  status        String     @default("active")
+  gitRepoJson   String     @default("{}")
   workspacePath String?
-  metadataJson  Json     @default("{}")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  metadataJson  String     @default("{}")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   tasks         Task[]
   workflows     Workflow[]
 
@@ -139,7 +78,7 @@ model Workflow {
   projectId        String
   project          Project   @relation(fields: [projectId], references: [id])
   status           String    @default("pending")
-  stepsJson        Json      @default("[]")
+  stepsJson        String    @default("[]")
   currentStepIndex Int       @default(0)
   startedAt        DateTime?
   completedAt      DateTime?

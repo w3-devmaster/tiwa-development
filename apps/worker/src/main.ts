@@ -1,7 +1,8 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { processJob, type TaskJobData } from './processor.js';
+import { detectCliTools, type CliAvailability } from './cli-detector.js';
+import { processTask, type TaskJobData, type TaskResult } from './processor.js';
 
 // Config from env
 const WORKER_PORT = parseInt(process.env.WORKER_PORT || '6770', 10);
@@ -15,6 +16,12 @@ const startedAt = Date.now();
 // Agent registry (managed by backend commands)
 const agents: string[] = [];
 let status: 'active' | 'idle' | 'error' = 'idle';
+
+// CLI tools availability (detected on startup)
+let cliTools: CliAvailability = {
+  claude: { available: false },
+  codex: { available: false },
+};
 
 // ========== Get LAN IP ==========
 function getLanIp(): string {
@@ -31,6 +38,31 @@ function getLanIp(): string {
 
 const lanIp = getLanIp();
 
+// ========== Result Reporting ==========
+async function reportTaskResult(taskId: string, result: TaskResult): Promise<void> {
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/orchestrator/worker-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workerId: WORKER_ID,
+        taskId,
+        status: result.status,
+        content: result.content,
+        error: result.error,
+        provider: result.provider,
+        durationMs: result.durationMs,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      console.error(`[Report] Failed to report result for task ${taskId}: HTTP ${res.status}`);
+    }
+  } catch (err) {
+    console.error(`[Report] Failed to report result for task ${taskId}:`, (err as Error).message);
+  }
+}
+
 // ========== Heartbeat ==========
 let heartbeatTimer: ReturnType<typeof setInterval>;
 
@@ -46,6 +78,7 @@ async function sendHeartbeat(): Promise<void> {
         agents,
         status,
         uptime: Date.now() - startedAt,
+        cliTools,
       }),
       signal: AbortSignal.timeout(5000),
     });
@@ -103,7 +136,13 @@ const server = http.createServer(async (req, res) => {
         agents,
         status,
         uptime: Date.now() - startedAt,
+        cliTools,
       });
+    }
+
+    // CLI tools info
+    if (method === 'GET' && url === '/cli-tools') {
+      return sendJson(res, 200, cliTools);
     }
 
     // Agent update (from backend)
@@ -140,18 +179,43 @@ const server = http.createServer(async (req, res) => {
       console.log(`[Task] Assignment received:`, body);
       status = 'active';
 
-      // Process the task asynchronously
       const jobData: TaskJobData = {
         taskId: body.taskId || randomUUID(),
         type: body.type || 'code',
-        payload: body.payload || {},
+        title: body.title || body.taskId || 'Untitled Task',
+        description: body.description,
+        projectPath: body.projectPath,
+        provider: body.provider,
+        agentRole: body.agentRole,
+        priority: body.priority,
       };
 
-      processJob({ data: jobData, id: jobData.taskId } as any)
-        .then((result) => console.log(`[Task] ${jobData.taskId} completed:`, result))
-        .catch((err) => console.error(`[Task] ${jobData.taskId} failed:`, err));
+      // Process async — respond immediately, report result later
+      processTask(jobData, cliTools)
+        .then(async (result) => {
+          console.log(`[Task] ${jobData.taskId} ${result.status} (${result.provider}, ${result.durationMs}ms)`);
+          await reportTaskResult(jobData.taskId, result);
+          status = 'idle';
+        })
+        .catch(async (err) => {
+          console.error(`[Task] ${jobData.taskId} error:`, err);
+          await reportTaskResult(jobData.taskId, {
+            taskId: jobData.taskId,
+            status: 'failed',
+            content: '',
+            error: err instanceof Error ? err.message : String(err),
+            provider: jobData.provider || 'claude',
+            durationMs: 0,
+          });
+          status = 'idle';
+        });
 
-      return sendJson(res, 200, { success: true, taskId: jobData.taskId, message: 'Task queued' });
+      return sendJson(res, 200, {
+        success: true,
+        taskId: jobData.taskId,
+        provider: jobData.provider || process.env.DEFAULT_CLI_PROVIDER || 'claude',
+        message: 'Task accepted, processing with CLI',
+      });
     }
 
     // 404
@@ -163,15 +227,33 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ========== Start ==========
-server.listen(WORKER_PORT, WORKER_HOST, () => {
-  console.log(`Tiwa Worker ${WORKER_ID} running on http://${WORKER_HOST}:${WORKER_PORT}`);
-  console.log(`  LAN IP: ${lanIp}`);
-  console.log(`  Backend: ${BACKEND_URL}`);
-  console.log(`  Heartbeat: every ${HEARTBEAT_INTERVAL}ms`);
+async function start() {
+  // Detect CLI tools
+  cliTools = await detectCliTools();
+  console.log(`CLI Tools detected:`);
+  console.log(`  claude: ${cliTools.claude.available ? `✓ ${cliTools.claude.version || 'available'}` : '✗ not found'}`);
+  console.log(`  codex:  ${cliTools.codex.available ? `✓ ${cliTools.codex.version || 'available'}` : '✗ not found'}`);
 
-  // Start heartbeat
-  sendHeartbeat(); // immediate first beat
-  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+  if (!cliTools.claude.available && !cliTools.codex.available) {
+    console.warn('⚠ No CLI tools found. Install Claude Code CLI or Codex CLI for task execution.');
+  }
+
+  server.listen(WORKER_PORT, WORKER_HOST, () => {
+    console.log(`\nTiwa Worker ${WORKER_ID} running on http://${WORKER_HOST}:${WORKER_PORT}`);
+    console.log(`  LAN IP: ${lanIp}`);
+    console.log(`  Backend: ${BACKEND_URL}`);
+    console.log(`  Heartbeat: every ${HEARTBEAT_INTERVAL}ms`);
+    console.log(`  Default provider: ${process.env.DEFAULT_CLI_PROVIDER || 'claude'}`);
+
+    // Start heartbeat
+    sendHeartbeat();
+    heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start worker:', err);
+  process.exit(1);
 });
 
 // ========== Shutdown ==========

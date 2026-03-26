@@ -1,20 +1,23 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
-import { Job } from 'bullmq';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OrchestratorService } from '../orchestrator/orchestrator.service';
+import { InProcessQueueService } from './in-process-queue.service';
 
-@Processor('task-execution')
-export class TaskExecutionProcessor extends WorkerHost {
+@Injectable()
+export class TaskExecutionProcessor implements OnModuleInit {
   private readonly logger = new Logger(TaskExecutionProcessor.name);
 
-  constructor(private orchestrator: OrchestratorService) {
-    super();
+  constructor(
+    private orchestrator: OrchestratorService,
+    private queue: InProcessQueueService,
+  ) {}
+
+  onModuleInit() {
+    this.queue.setProcessor((taskId) => this.process(taskId));
+    this.logger.log('Task execution processor registered');
   }
 
-  async process(job: Job<{ taskId: string }>): Promise<any> {
-    const { taskId } = job.data;
-    this.logger.log(`Processing task: ${taskId} (job ${job.id})`);
-
+  async process(taskId: string): Promise<any> {
+    this.logger.log(`Processing task: ${taskId}`);
     try {
       const result = await this.orchestrator.executeTask(taskId);
       this.logger.log(`Task ${taskId} finished: ${result.status}`);

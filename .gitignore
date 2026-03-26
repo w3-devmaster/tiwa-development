@@ -43,8 +43,12 @@ apps/backend/prisma/migrations/*.sql.bak
 # Docker
 docker-compose.override.yml
 
-# Settings (API keys)
+# Backend data (SQLite DB, settings, logs)
+apps/backend/data/*.db
+apps/backend/data/*.db-journal
 apps/backend/data/settings.json
+apps/backend/data/logs.json
+apps/backend/data/chat-messages.json
 
 # Misc
 *.tsbuildinfo

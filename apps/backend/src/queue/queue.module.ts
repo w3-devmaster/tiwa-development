@@ -1,13 +1,12 @@
-import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
+import { Global, Module, forwardRef } from '@nestjs/common';
+import { InProcessQueueService } from './in-process-queue.service';
 import { TaskExecutionProcessor } from './task-execution.processor';
 import { OrchestratorModule } from '../orchestrator/orchestrator.module';
 
+@Global()
 @Module({
-  imports: [
-    BullModule.registerQueue({ name: 'task-execution' }),
-    OrchestratorModule,
-  ],
-  providers: [TaskExecutionProcessor],
+  imports: [forwardRef(() => OrchestratorModule)],
+  providers: [InProcessQueueService, TaskExecutionProcessor],
+  exports: [InProcessQueueService],
 })
 export class QueueModule {}

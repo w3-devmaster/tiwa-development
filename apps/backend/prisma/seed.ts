@@ -208,7 +208,7 @@ async function main() {
       name: 'Tiwa Platform',
       description: 'AI Orchestrator System - Main Platform',
       status: 'active',
-      gitRepoJson: { url: 'https://github.com/user/tiwa', branch: 'main' },
+      gitRepoJson: JSON.stringify({ url: 'https://github.com/user/tiwa', branch: 'main' }),
       workspacePath: '/workspace/tiwa',
     },
   });
@@ -216,14 +216,17 @@ async function main() {
 
   // Create agents
   for (const seed of agentSeeds) {
+    const dc = JSON.stringify(seed.displayConfig);
+    const st = JSON.stringify(seed.stats);
+    const cj = JSON.stringify(seed.configJson || {});
     await prisma.agent.upsert({
       where: { id: seed.id },
       update: {
         status: seed.status,
         task: seed.task,
-        displayConfig: seed.displayConfig,
-        stats: seed.stats,
-        configJson: seed.configJson || {},
+        displayConfig: dc,
+        stats: st,
+        configJson: cj,
       },
       create: {
         id: seed.id,
@@ -233,9 +236,9 @@ async function main() {
         model: seed.model,
         department: seed.department,
         task: seed.task || null,
-        displayConfig: seed.displayConfig,
-        stats: seed.stats,
-        configJson: seed.configJson || {},
+        displayConfig: dc,
+        stats: st,
+        configJson: cj,
       },
     });
     console.log(`  Agent: ${seed.name} (${seed.status})`);
@@ -253,14 +256,14 @@ async function main() {
       status: 'running',
       currentStepIndex: 2,
       startedAt: new Date(),
-      stepsJson: [
+      stepsJson: JSON.stringify([
         { id: 's1', name: 'Requirement', taskType: 'plan', agentRole: 'planner', dependsOn: [] },
         { id: 's2', name: 'Planning', taskType: 'plan', agentRole: 'planner', dependsOn: ['s1'] },
         { id: 's3', name: 'Development', taskType: 'code', agentRole: 'backend', dependsOn: ['s2'] },
         { id: 's4', name: 'Testing', taskType: 'test', agentRole: 'qa', dependsOn: ['s3'] },
         { id: 's5', name: 'Review', taskType: 'review', agentRole: 'reviewer', dependsOn: ['s4'] },
         { id: 's6', name: 'Deploy', taskType: 'deploy', agentRole: 'devops', dependsOn: ['s5'] },
-      ],
+      ]),
     },
   });
   console.log(`  Workflow: ${workflow.name}`);

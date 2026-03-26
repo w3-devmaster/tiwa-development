@@ -184,6 +184,13 @@ export async function startServices(): Promise<DaemonState> {
   const backendDir = join(projectRoot, 'apps', 'backend');
   const frontendDir = join(projectRoot, 'apps', 'frontend');
 
+  // Auto-init SQLite database if not exists
+  const dbPath = join(backendDir, 'data', 'tiwa.db');
+  if (!existsSync(dbPath)) {
+    await execPromise('npx prisma db push --skip-generate', { cwd: backendDir });
+    await execPromise('npx prisma db seed', { cwd: backendDir });
+  }
+
   // Backend
   let backendState: ServiceState | null = null;
   const backendDist = join(backendDir, 'dist', 'main.js');
@@ -278,6 +285,9 @@ export async function startWorker(backendUrl?: string): Promise<WorkerState> {
       WORKER_HOST: config.worker.host,
       BACKEND_URL: resolvedBackendUrl,
       HEARTBEAT_INTERVAL: String(config.worker.heartbeatInterval),
+      DEFAULT_CLI_PROVIDER: config.worker.cliProvider || 'claude',
+      CLI_TIMEOUT: String(config.worker.cliTimeout || 300000),
+      CLI_WORK_DIR: config.worker.cliWorkDir || '',
       NODE_ENV: process.env.NODE_ENV ?? 'development',
     },
   }, logDir);
@@ -360,7 +370,7 @@ export async function getFullStatus(): Promise<SystemStatus> {
   // Try to get connected workers from backend
   try {
     const res = await fetch(`${config.orchestrator.url}/api/workers`, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) connectedWorkers = await res.json();
+    if (res.ok) connectedWorkers = await res.json() as any[];
   } catch { /* */ }
 
   const uptime = state && (backendRunning || frontendRunning)
