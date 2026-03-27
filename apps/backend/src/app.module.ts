@@ -17,6 +17,7 @@ import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { QueueModule } from './queue/queue.module';
 import { SkillsModule } from './skills/skills.module';
 import { CommandsModule } from './commands/commands.module';
+import { ServicesModule } from './services/services.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { CommandsModule } from './commands/commands.module';
     QueueModule,
     SkillsModule,
     CommandsModule,
+    ServicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

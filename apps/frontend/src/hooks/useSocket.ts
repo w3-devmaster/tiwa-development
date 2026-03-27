@@ -42,6 +42,12 @@ export function useSocket() {
     socket.on('worker:update', () => {
       qc.invalidateQueries({ queryKey: ['workers'] });
     });
+    socket.on('service:restart', (data: { name: string; progress: number; phase: string }) => {
+      const store = useAppStore.getState();
+      if (store.restartingService === data.name) {
+        store.setRestarting(data.name, data.progress, data.phase);
+      }
+    });
 
     return () => {
       socket.disconnect();

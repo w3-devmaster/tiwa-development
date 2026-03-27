@@ -85,6 +85,10 @@ export class WorkersService {
     return results;
   }
 
+  clearWorkers(): void {
+    this.workers.clear();
+  }
+
   private cleanupStaleWorkers(): void {
     const now = Date.now();
     for (const [id, worker] of this.workers) {

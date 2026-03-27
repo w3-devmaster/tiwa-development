@@ -1,6 +1,5 @@
 'use client';
 import DeskUnit from './DeskUnit';
-import { agents as allAgents } from '@/data/mockData';
 import type { AgentData } from '@/data/mockData';
 
 interface RoomData {
@@ -27,7 +26,7 @@ const progColors: Record<string, string> = {
   dv: 'bg-gradient-to-r from-[#00b894] to-[#55efc4]',
 };
 
-export default function Room({ room, onClick, onAgentClick }: { room: RoomData; onClick?: () => void; onAgentClick?: (agentId: string) => void }) {
+export default function Room({ room, agents: allAgents = [], onClick, onAgentClick }: { room: RoomData; agents?: AgentData[]; onClick?: () => void; onAgentClick?: (agentId: string) => void }) {
   const roomAgents: AgentData[] = room.agents.map((id) => allAgents.find((a) => a.id === id)!).filter(Boolean);
   const hasActive = roomAgents.some((a) => a.status === 'working' || a.status === 'thinking');
 

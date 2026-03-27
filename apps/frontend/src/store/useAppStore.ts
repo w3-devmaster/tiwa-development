@@ -16,6 +16,10 @@ interface AppState {
   setConnectionStatus: (status: 'connected' | 'disconnected' | 'reconnecting') => void;
   useMockData: boolean;
   setUseMockData: (val: boolean) => void;
+  restartingService: string | null;
+  restartProgress: number;
+  restartPhase: string;
+  setRestarting: (name: string | null, progress?: number, phase?: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -31,6 +35,11 @@ export const useAppStore = create<AppState>((set) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   useMockData: false,
   setUseMockData: (val) => set({ useMockData: val }),
+  restartingService: null,
+  restartProgress: 0,
+  restartPhase: '',
+  setRestarting: (name, progress = 0, phase = '') =>
+    set({ restartingService: name, restartProgress: progress, restartPhase: phase }),
 }));
 
 export const pageNames: Record<PageId, string> = {

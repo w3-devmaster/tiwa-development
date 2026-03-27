@@ -8,7 +8,7 @@ import { useAppStore } from '@/store/useAppStore';
 
 export default function VirtualOffice() {
   const { setPage, setSelectedRoom, selectedAgentId, setSelectedAgentId } = useAppStore();
-  const { data: rooms, isLoading } = useRooms();
+  const { data: rooms, agents, isLoading } = useRooms();
 
   return (
     <div className="w-full min-h-full p-6" style={{
@@ -28,6 +28,7 @@ export default function VirtualOffice() {
             <Room
               key={room.id}
               room={room}
+              agents={agents}
               onClick={() => {
                 setSelectedRoom(room.id);
                 setPage('detail');

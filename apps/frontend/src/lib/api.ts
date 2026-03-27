@@ -99,6 +99,12 @@ export const approveCommand = (id: string) =>
 export const updateCommand = (id: string, data: any) =>
   fetchApi<any>(`/api/commands/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
+// Services
+export const getServiceStatuses = () =>
+  fetchApi<{ name: string; label: string; status: string; details?: string; restartable: boolean }[]>('/api/services/status');
+export const restartService = (name: string) =>
+  fetchApi<{ success: boolean; message: string }>(`/api/services/${name}/restart`, { method: 'POST' });
+
 // Logs
 export const getLogs = (dept?: string, limit?: number) => {
   const params = new URLSearchParams();

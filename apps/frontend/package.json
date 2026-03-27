@@ -10,6 +10,7 @@
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.0.0",
     "@tiwa/shared": "workspace:*",
     "next": "^15.2.0",

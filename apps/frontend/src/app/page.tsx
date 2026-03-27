@@ -13,6 +13,7 @@ import SettingsPage from '@/components/pages/SettingsPage';
 import ProjectsPage from '@/components/pages/ProjectsPage';
 import SkillsPage from '@/components/pages/SkillsPage';
 import CommandPage from '@/components/pages/CommandPage';
+import RestartOverlay from '@/components/RestartOverlay';
 import PlaceholderPage from '@/components/pages/PlaceholderPage';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -27,6 +28,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen">
+      <RestartOverlay />
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar />

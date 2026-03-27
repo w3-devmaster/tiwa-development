@@ -60,6 +60,10 @@ export class EventsGateway
     this.server.emit('chat:message', message);
   }
 
+  emitServiceRestart(data: unknown) {
+    this.server.emit('service:restart', data);
+  }
+
   // --- Chat handling ---
 
   @SubscribeMessage('chat:send')

@@ -149,8 +149,13 @@ const deptConfig: Record<
   },
 };
 
-/** Group a list of AgentData into department-based rooms. */
-export function agentsToRooms(agents: AgentData[]): RoomData[] {
+/** Group a list of AgentData into department-based rooms.
+ *  taskBoard is optional — when provided, progress is computed from real task completion data.
+ */
+export function agentsToRooms(
+  agents: AgentData[],
+  taskBoard?: { todo: any[]; in_progress: any[]; review: any[]; done: any[] },
+): RoomData[] {
   const grouped = agents.reduce(
     (acc, agent) => {
       const dept = agent.department;
@@ -161,6 +166,23 @@ export function agentsToRooms(agents: AgentData[]): RoomData[] {
     {} as Record<string, AgentData[]>,
   );
 
+  // Compute per-department task completion if taskBoard is available
+  const deptProgress: Record<string, { done: number; total: number }> = {};
+  if (taskBoard) {
+    const allTasks = [
+      ...taskBoard.todo,
+      ...taskBoard.in_progress,
+      ...taskBoard.review,
+      ...taskBoard.done,
+    ];
+    for (const task of allTasks) {
+      const dept = task.department || 'unknown';
+      if (!deptProgress[dept]) deptProgress[dept] = { done: 0, total: 0 };
+      deptProgress[dept].total++;
+      if (task.status === 'done') deptProgress[dept].done++;
+    }
+  }
+
   return Object.entries(grouped).map(([dept, deptAgents]) => {
     const config = deptConfig[dept] || {
       name: dept,
@@ -168,18 +190,29 @@ export function agentsToRooms(agents: AgentData[]): RoomData[] {
       iconClass: 'be',
       dept: '',
     };
-    const totalTasks = deptAgents.reduce(
-      (s, a) =>
-        s +
-        (typeof a.stats.tasks === 'number'
-          ? a.stats.tasks
-          : parseInt(String(a.stats.tasks)) || 0),
-      0,
-    );
-    const done = Math.floor(totalTasks * 0.6);
     const active = deptAgents.filter(
       (a) => a.status === 'working' || a.status === 'thinking',
     ).length;
+
+    // Use real task data if available, otherwise compute from agent stats
+    let done: number;
+    let totalTasks: number;
+    const dp = deptProgress[dept];
+    if (dp && dp.total > 0) {
+      done = dp.done;
+      totalTasks = dp.total;
+    } else {
+      totalTasks = deptAgents.reduce(
+        (s, a) =>
+          s +
+          (typeof a.stats.tasks === 'number'
+            ? a.stats.tasks
+            : parseInt(String(a.stats.tasks)) || 0),
+        0,
+      );
+      done = totalTasks > 0 ? Math.floor(totalTasks * 0.6) : 0;
+    }
+
     const progress = totalTasks > 0 ? Math.round((done / totalTasks) * 100) : 0;
     return {
       id: dept,
