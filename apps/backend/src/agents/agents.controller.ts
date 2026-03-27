@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -44,5 +45,15 @@ export class AgentsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.agentsService.remove(id);
+  }
+
+  @Get(':id/skills')
+  getSkills(@Param('id') id: string) {
+    return this.agentsService.getSkills(id);
+  }
+
+  @Put(':id/skills')
+  setSkills(@Param('id') id: string, @Body() body: { skillIds: string[] }) {
+    return this.agentsService.setSkills(id, body.skillIds);
   }
 }

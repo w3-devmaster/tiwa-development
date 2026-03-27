@@ -1,7 +1,7 @@
 'use client';
 import { create } from 'zustand';
 
-export type PageId = 'office' | 'detail' | 'tasks' | 'agents' | 'departments' | 'projects' | 'workflows' | 'testing' | 'logs' | 'settings';
+export type PageId = 'office' | 'detail' | 'tasks' | 'agents' | 'departments' | 'projects' | 'workflows' | 'testing' | 'logs' | 'settings' | 'skills' | 'command';
 
 interface AppState {
   currentPage: PageId;
@@ -10,6 +10,8 @@ interface AppState {
   setSelectedRoom: (room: string | null) => void;
   selectedTaskId: string | null;
   setSelectedTaskId: (taskId: string | null) => void;
+  selectedAgentId: string | null;
+  setSelectedAgentId: (agentId: string | null) => void;
   connectionStatus: 'connected' | 'disconnected' | 'reconnecting';
   setConnectionStatus: (status: 'connected' | 'disconnected' | 'reconnecting') => void;
   useMockData: boolean;
@@ -23,6 +25,8 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedRoom: (room) => set({ selectedRoom: room }),
   selectedTaskId: null,
   setSelectedTaskId: (taskId) => set({ selectedTaskId: taskId }),
+  selectedAgentId: null,
+  setSelectedAgentId: (agentId) => set({ selectedAgentId: agentId }),
   connectionStatus: 'disconnected',
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   useMockData: false,
@@ -40,4 +44,6 @@ export const pageNames: Record<PageId, string> = {
   testing: 'Testing',
   logs: 'Logs',
   settings: 'Settings',
+  skills: 'Skills',
+  command: 'Command',
 };

@@ -15,6 +15,8 @@ import { AiProviderModule } from './ai-provider/ai-provider.module';
 import { SettingsModule } from './settings/settings.module';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { QueueModule } from './queue/queue.module';
+import { SkillsModule } from './skills/skills.module';
+import { CommandsModule } from './commands/commands.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { QueueModule } from './queue/queue.module';
     LogsModule,
     OrchestratorModule,
     QueueModule,
+    SkillsModule,
+    CommandsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

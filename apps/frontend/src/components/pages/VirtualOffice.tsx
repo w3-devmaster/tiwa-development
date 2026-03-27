@@ -2,11 +2,12 @@
 import StatsStrip from '@/components/office/StatsStrip';
 import WorkflowPipeline from '@/components/office/WorkflowPipeline';
 import Room from '@/components/office/Room';
+import AgentDetailPanel from '@/components/office/AgentDetailPanel';
 import { useRooms } from '@/hooks/useAgents';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function VirtualOffice() {
-  const { setPage, setSelectedRoom } = useAppStore();
+  const { setPage, setSelectedRoom, selectedAgentId, setSelectedAgentId } = useAppStore();
   const { data: rooms, isLoading } = useRooms();
 
   return (
@@ -31,9 +32,20 @@ export default function VirtualOffice() {
                 setSelectedRoom(room.id);
                 setPage('detail');
               }}
+              onAgentClick={(agentId) => {
+                setSelectedAgentId(agentId);
+              }}
             />
           ))}
         </div>
+      )}
+
+      {/* Agent Detail Panel */}
+      {selectedAgentId && (
+        <AgentDetailPanel
+          agentId={selectedAgentId}
+          onClose={() => setSelectedAgentId(null)}
+        />
       )}
     </div>
   );

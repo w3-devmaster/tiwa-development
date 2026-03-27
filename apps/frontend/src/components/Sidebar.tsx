@@ -20,6 +20,7 @@ export default function Sidebar() {
         { id: 'office' as PageId, icon: '🏢', label: 'Virtual Office', badge: isLive ? 'Live' : undefined, badgeClass: 'bg-[#00b894]' },
         { id: 'tasks' as PageId, icon: '📋', label: 'Task Board', badge: String(taskCount), badgeClass: 'bg-[#6c5ce7]' },
         { id: 'agents' as PageId, icon: '🤖', label: 'AI Agents', badge: String(agentCount), badgeClass: 'bg-[#6c5ce7]' },
+        { id: 'command' as PageId, icon: '⚡', label: 'Command' },
       ],
     },
     {
@@ -27,6 +28,7 @@ export default function Sidebar() {
       items: [
         { id: 'departments' as PageId, icon: '🏛️', label: 'Departments' },
         { id: 'projects' as PageId, icon: '📁', label: 'Projects' },
+        { id: 'skills' as PageId, icon: '📝', label: 'Skills' },
         { id: 'workflows' as PageId, icon: '🔄', label: 'Workflows' },
         { id: 'testing' as PageId, icon: '🧪', label: 'Testing', badge: errorCount ? String(errorCount) : undefined, badgeClass: 'bg-[#e17055]' },
       ],

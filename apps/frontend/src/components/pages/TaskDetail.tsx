@@ -1,5 +1,5 @@
 'use client';
-import { useTaskDetail, useExecuteTask } from '@/hooks/useTasks';
+import { useTaskDetail, useExecuteTask, useTaskMutations } from '@/hooks/useTasks';
 import { useAppStore } from '@/store/useAppStore';
 
 const statusStyles: Record<string, { bg: string; text: string; label: string }> = {
@@ -16,6 +16,19 @@ export default function TaskDetail() {
   const { selectedTaskId, setSelectedTaskId, setPage } = useAppStore();
   const { data: task, isLoading } = useTaskDetail(selectedTaskId);
   const executeMutation = useExecuteTask();
+  const { update, remove } = useTaskMutations();
+
+  const handleCancel = async () => {
+    if (!selectedTaskId) return;
+    await update.mutateAsync({ id: selectedTaskId, data: { status: 'cancelled' } });
+  };
+
+  const handleDelete = async () => {
+    if (!selectedTaskId) return;
+    await remove.mutateAsync(selectedTaskId);
+    setSelectedTaskId(null);
+    setPage('tasks');
+  };
 
   if (!selectedTaskId) {
     return (
@@ -91,8 +104,8 @@ export default function TaskDetail() {
       )}
 
       {/* Actions */}
-      {task.status === 'pending' && (
-        <div className="mb-4">
+      <div className="flex gap-2 mb-4">
+        {task.status === 'pending' && (
           <button
             onClick={() => executeMutation.mutate(task.id)}
             disabled={executeMutation.isPending}
@@ -100,8 +113,26 @@ export default function TaskDetail() {
           >
             {executeMutation.isPending ? 'Executing...' : 'Execute Task'}
           </button>
-        </div>
-      )}
+        )}
+        {!['completed', 'cancelled', 'failed'].includes(task.status) && (
+          <button
+            onClick={handleCancel}
+            disabled={update.isPending}
+            className="px-5 py-2 rounded-lg text-sm font-medium bg-[#2a2e45] text-[#e17055] hover:bg-[#e17055] hover:text-white transition-colors disabled:opacity-50"
+          >
+            {update.isPending ? 'Cancelling...' : 'Cancel Task'}
+          </button>
+        )}
+        {['completed', 'cancelled', 'failed'].includes(task.status) && (
+          <button
+            onClick={handleDelete}
+            disabled={remove.isPending}
+            className="px-5 py-2 rounded-lg text-sm font-medium bg-[#2a2e45] text-[#e17055] hover:bg-[#e17055] hover:text-white transition-colors disabled:opacity-50"
+          >
+            {remove.isPending ? 'Deleting...' : 'Delete Task'}
+          </button>
+        )}
+      </div>
 
       {/* Timeline */}
       <div className="bg-[#181c2e] border border-[#2a2e45] rounded-xl p-4 mb-4">

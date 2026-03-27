@@ -10,11 +10,13 @@ import TaskDetail from '@/components/pages/TaskDetail';
 import AgentsPage from '@/components/pages/AgentsPage';
 import DepartmentsPage from '@/components/pages/DepartmentsPage';
 import SettingsPage from '@/components/pages/SettingsPage';
+import ProjectsPage from '@/components/pages/ProjectsPage';
+import SkillsPage from '@/components/pages/SkillsPage';
+import CommandPage from '@/components/pages/CommandPage';
 import PlaceholderPage from '@/components/pages/PlaceholderPage';
 import { useAppStore } from '@/store/useAppStore';
 
 const placeholders: Record<string, { icon: string; title: string }> = {
-  projects: { icon: '📁', title: 'Projects' },
   workflows: { icon: '🔄', title: 'Workflows' },
   testing: { icon: '🧪', title: 'Testing' },
   logs: { icon: '📊', title: 'Logs' },
@@ -36,6 +38,9 @@ export default function Home() {
           )}
           {currentPage === 'agents' && <AgentsPage />}
           {currentPage === 'departments' && <DepartmentsPage />}
+          {currentPage === 'projects' && <ProjectsPage />}
+          {currentPage === 'skills' && <SkillsPage />}
+          {currentPage === 'command' && <CommandPage />}
           {currentPage === 'settings' && <SettingsPage />}
           {placeholders[currentPage] && (
             <PlaceholderPage

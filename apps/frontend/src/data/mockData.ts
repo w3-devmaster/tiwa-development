@@ -21,6 +21,7 @@ export interface TaskData {
   tag: 'Backend' | 'Frontend' | 'QA' | 'DevOps';
   tagClass: 'be' | 'fe' | 'qa' | 'dv';
   assignee: string;
+  department?: string;
   status: 'todo' | 'in_progress' | 'review' | 'done';
 }
 

@@ -110,10 +110,7 @@ export class TasksService {
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.task.update({
-      where: { id },
-      data: { status: 'cancelled' },
-    });
+    return this.prisma.task.delete({ where: { id } });
   }
 
   async getBoard() {

@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useAgents, useAgentMutations, useTestAgent } from '@/hooks/useAgents';
+import { useRawAgents, useAgentMutations, useTestAgent } from '@/hooks/useAgents';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useSkills } from '@/hooks/useSkills';
 import { useSettings } from '@/hooks/useSettings';
+import { setAgentSkills } from '@/lib/api';
 
 const MODELS_BY_PROVIDER: Record<string, { value: string; label: string }[]> = {
   anthropic: [
@@ -34,6 +36,7 @@ interface AgentForm {
   provider: string;
   model: string;
   systemPrompt: string;
+  skillIds: string[];
 }
 
 const emptyForm: AgentForm = {
@@ -43,11 +46,13 @@ const emptyForm: AgentForm = {
   provider: 'anthropic',
   model: 'claude-sonnet-4-20250514',
   systemPrompt: '',
+  skillIds: [],
 };
 
 export default function AgentsPage() {
-  const { data: agents, isLoading } = useAgents();
+  const { data: agents, isLoading } = useRawAgents();
   const { data: departments } = useDepartments();
+  const { data: skills } = useSkills();
   const { data: settings } = useSettings();
   const { create, update, remove } = useAgentMutations();
   const testAgent = useTestAgent();
@@ -84,6 +89,7 @@ export default function AgentsPage() {
   const openEdit = (agent: any) => {
     const configJson = agent.configJson || agent.config || {};
     const provider = configJson.provider || detectProvider(agent.model);
+    const agentSkillIds = (agent.skills || []).map((as: any) => as.skill?.id || as.skillId).filter(Boolean);
     setForm({
       name: agent.name,
       role: agent.role || agent.displayConfig?.role || '',
@@ -91,6 +97,7 @@ export default function AgentsPage() {
       provider,
       model: agent.model || 'claude-sonnet-4-20250514',
       systemPrompt: configJson.systemPrompt || '',
+      skillIds: agentSkillIds,
     });
     setEditingId(agent.id);
     setTestResult(null);
@@ -123,8 +130,12 @@ export default function AgentsPage() {
 
     if (editingId) {
       await update.mutateAsync({ id: editingId, data });
+      await setAgentSkills(editingId, form.skillIds);
     } else {
-      await create.mutateAsync(data);
+      const newAgent = await create.mutateAsync(data);
+      if (newAgent?.id && form.skillIds.length > 0) {
+        await setAgentSkills(newAgent.id, form.skillIds);
+      }
     }
     setShowForm(false);
     setEditingId(null);
@@ -241,6 +252,20 @@ export default function AgentsPage() {
                 <span className="inline-block px-[9px] py-[3px] rounded-lg text-[9px] bg-[rgba(108,92,231,.1)] text-[#6c5ce7] font-semibold">
                   {agent.model}
                 </span>
+
+                {/* Skills */}
+                {agent.skills && agent.skills.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-1 mt-2">
+                    {agent.skills.slice(0, 3).map((as: any) => (
+                      <span key={as.skill?.id || as.id} className="text-[8px] px-1.5 py-0.5 rounded bg-[#6c5ce722] text-[#a29bfe]">
+                        {as.skill?.name || as.name}
+                      </span>
+                    ))}
+                    {agent.skills.length > 3 && (
+                      <span className="text-[8px] text-[#555878]">+{agent.skills.length - 3}</span>
+                    )}
+                  </div>
+                )}
 
                 {/* Status indicator */}
                 <div className="mt-2">
@@ -362,6 +387,38 @@ export default function AgentsPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Skills */}
+            <label className="block text-xs text-[#7b7f9e] mb-1.5 font-medium">Skills</label>
+            <div className="flex flex-wrap gap-1.5 mb-4 p-2 bg-[#0a0c14] border border-[#2a2e45] rounded-lg min-h-[36px]">
+              {(skills ?? []).length === 0 && (
+                <span className="text-[10px] text-[#555878]">No skills created yet</span>
+              )}
+              {(skills ?? []).map((skill: any) => {
+                const selected = form.skillIds.includes(skill.id);
+                return (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => {
+                      setForm((prev) => ({
+                        ...prev,
+                        skillIds: selected
+                          ? prev.skillIds.filter((id) => id !== skill.id)
+                          : [...prev.skillIds, skill.id],
+                      }));
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                      selected
+                        ? 'bg-[#6c5ce7] text-white'
+                        : 'bg-[#2a2e45] text-[#7b7f9e] hover:bg-[#3a3e55]'
+                    }`}
+                  >
+                    {skill.name}
+                  </button>
+                );
+              })}
             </div>
 
             {/* System Prompt */}

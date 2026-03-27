@@ -27,7 +27,7 @@ const progColors: Record<string, string> = {
   dv: 'bg-gradient-to-r from-[#00b894] to-[#55efc4]',
 };
 
-export default function Room({ room, onClick }: { room: RoomData; onClick?: () => void }) {
+export default function Room({ room, onClick, onAgentClick }: { room: RoomData; onClick?: () => void; onAgentClick?: (agentId: string) => void }) {
   const roomAgents: AgentData[] = room.agents.map((id) => allAgents.find((a) => a.id === id)!).filter(Boolean);
   const hasActive = roomAgents.some((a) => a.status === 'working' || a.status === 'thinking');
 
@@ -59,7 +59,16 @@ export default function Room({ room, onClick }: { room: RoomData; onClick?: () =
       }}>
         <div className="flex gap-8 flex-wrap justify-center">
           {roomAgents.map((agent) => (
-            <DeskUnit key={agent.id} agent={agent} />
+            <div
+              key={agent.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAgentClick?.(agent.id);
+              }}
+              className="cursor-pointer hover:scale-105 transition-transform"
+            >
+              <DeskUnit agent={agent} />
+            </div>
           ))}
         </div>
       </div>

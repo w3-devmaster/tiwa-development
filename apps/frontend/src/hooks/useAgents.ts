@@ -19,6 +19,19 @@ export function useAgents() {
   });
 }
 
+/** Returns raw API agent data (not adapted to AgentData shape). */
+export function useRawAgents() {
+  const useMock = useAppStore((s) => s.useMockData);
+  return useQuery({
+    queryKey: ['agents', 'raw'],
+    queryFn: async () => {
+      if (useMock) return mockAgents;
+      return getAgents();
+    },
+    staleTime: 3000,
+  });
+}
+
 export function useRooms() {
   const useMock = useAppStore((s) => s.useMockData);
   const { data: agents, isLoading } = useAgents();

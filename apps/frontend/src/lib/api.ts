@@ -25,6 +25,18 @@ export const getAgentStats = () =>
   fetchApi<{ activeAgents: number; totalTasks: number; completedToday: number; errors: number }>(
     '/api/agents/stats',
   );
+export const setAgentSkills = (agentId: string, skillIds: string[]) =>
+  fetchApi<any>(`/api/agents/${agentId}/skills`, { method: 'PUT', body: JSON.stringify({ skillIds }) });
+
+// Skills
+export const getSkills = () => fetchApi<any[]>('/api/skills');
+export const getSkill = (id: string) => fetchApi<any>(`/api/skills/${id}`);
+export const createSkill = (data: any) =>
+  fetchApi<any>('/api/skills', { method: 'POST', body: JSON.stringify(data) });
+export const updateSkill = (id: string, data: any) =>
+  fetchApi<any>(`/api/skills/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const deleteSkill = (id: string) =>
+  fetchApi<any>(`/api/skills/${id}`, { method: 'DELETE' });
 
 // Departments
 export const getDepartments = () => fetchApi<any[]>('/api/departments');
@@ -59,14 +71,33 @@ export const createTask = (data: any) =>
   fetchApi<any>('/api/tasks', { method: 'POST', body: JSON.stringify(data) });
 export const updateTask = (id: string, data: any) =>
   fetchApi<any>(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const deleteTask = (id: string) =>
+  fetchApi<any>(`/api/tasks/${id}`, { method: 'DELETE' });
 
 // Projects
 export const getProjects = () => fetchApi<any[]>('/api/projects');
 export const createProject = (data: any) =>
   fetchApi<any>('/api/projects', { method: 'POST', body: JSON.stringify(data) });
+export const updateProject = (id: string, data: any) =>
+  fetchApi<any>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+export const deleteProject = (id: string) =>
+  fetchApi<any>(`/api/projects/${id}`, { method: 'DELETE' });
 
 // Workflows
 export const getWorkflows = () => fetchApi<any[]>('/api/workflows');
+
+// Commands
+export const getCommands = (projectId?: string) =>
+  fetchApi<any[]>(`/api/commands${projectId ? `?projectId=${projectId}` : ''}`);
+export const getCommand = (id: string) => fetchApi<any>(`/api/commands/${id}`);
+export const createCommand = (data: { projectId: string; instruction: string }) =>
+  fetchApi<any>('/api/commands', { method: 'POST', body: JSON.stringify(data) });
+export const analyzeCommand = (id: string) =>
+  fetchApi<any>(`/api/commands/${id}/analyze`, { method: 'POST' });
+export const approveCommand = (id: string) =>
+  fetchApi<any>(`/api/commands/${id}/approve`, { method: 'POST' });
+export const updateCommand = (id: string, data: any) =>
+  fetchApi<any>(`/api/commands/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 
 // Logs
 export const getLogs = (dept?: string, limit?: number) => {

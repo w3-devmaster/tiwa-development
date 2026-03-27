@@ -19,17 +19,30 @@ export class AgentsService {
 
   async findAll(status?: string) {
     const where = status ? { status } : {};
-    const agents = await this.prisma.agent.findMany({ where, orderBy: { createdAt: 'desc' } });
-    return agents.map((a) => this.parseJsonFields(a));
+    const agents = await this.prisma.agent.findMany({
+      where,
+      include: { skills: { include: { skill: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return agents.map((a) => ({
+      ...this.parseJsonFields(a),
+      skills: a.skills.map((as: any) => as.skill),
+    }));
   }
 
   async findOne(id: string) {
     const agent = await this.prisma.agent.findUnique({
       where: { id },
-      include: { tasks: { take: 10, orderBy: { updatedAt: 'desc' } } },
+      include: {
+        tasks: { take: 10, orderBy: { updatedAt: 'desc' } },
+        skills: { include: { skill: true } },
+      },
     });
     if (!agent) throw new NotFoundException(`Agent ${id} not found`);
-    return this.parseJsonFields(agent);
+    return {
+      ...this.parseJsonFields(agent),
+      skills: agent.skills.map((as: any) => as.skill),
+    };
   }
 
   async create(dto: CreateAgentDto) {
@@ -71,6 +84,28 @@ export class AgentsService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.agent.delete({ where: { id } });
+  }
+
+  async getSkills(agentId: string) {
+    await this.findOne(agentId);
+    const agentSkills = await this.prisma.agentSkill.findMany({
+      where: { agentId },
+      include: { skill: true },
+    });
+    return agentSkills.map((as) => as.skill);
+  }
+
+  async setSkills(agentId: string, skillIds: string[]) {
+    await this.findOne(agentId);
+    // Delete existing
+    await this.prisma.agentSkill.deleteMany({ where: { agentId } });
+    // Create new
+    if (skillIds.length > 0) {
+      await this.prisma.agentSkill.createMany({
+        data: skillIds.map((skillId) => ({ agentId, skillId })),
+      });
+    }
+    return this.getSkills(agentId);
   }
 
   async getStats() {

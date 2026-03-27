@@ -79,6 +79,7 @@ export function taskToTaskData(task: any): TaskData {
     tag: dept.tag,
     tagClass: dept.tagClass,
     assignee: task.assignedAgent?.name?.[0] || '?',
+    department: task.assignedAgent?.department || undefined,
     status: mapTaskStatus(task.status),
   };
 }

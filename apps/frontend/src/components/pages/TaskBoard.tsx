@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useTaskBoard, useSubmitTask } from '@/hooks/useTasks';
+import { useTaskBoard, useSubmitTask, useTaskMutations } from '@/hooks/useTasks';
 import { useAppStore } from '@/store/useAppStore';
 
 const columns = [
@@ -23,6 +23,7 @@ const priorities = ['low', 'medium', 'high', 'critical'];
 export default function TaskBoard() {
   const { data: board, isLoading } = useTaskBoard();
   const submitTask = useSubmitTask();
+  const { update, remove } = useTaskMutations();
   const { setPage, setSelectedTaskId } = useAppStore();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ title: '', description: '', type: 'code', priority: 'medium' });
@@ -42,7 +43,17 @@ export default function TaskBoard() {
 
   const handleTaskClick = (taskId: string) => {
     setSelectedTaskId(taskId);
-    setPage('tasks'); // stays on tasks but shows detail
+    setPage('tasks');
+  };
+
+  const handleCancel = async (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    await update.mutateAsync({ id: taskId, data: { status: 'cancelled' } });
+  };
+
+  const handleDelete = async (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    await remove.mutateAsync(taskId);
   };
 
   return (
@@ -161,20 +172,49 @@ export default function TaskBoard() {
                   ))}
                 </div>
               ) : (
-                colTasks.map((task) => (
+                colTasks.map((task: any) => (
                   <div
                     key={task.id}
                     onClick={() => handleTaskClick(task.id)}
-                    className={`bg-[#181c2e] border border-[#2a2e45] rounded-lg p-2.5 mb-2 cursor-pointer transition-all hover:border-[#6c5ce7] hover:-translate-y-[1px] ${col.status === 'done' ? 'opacity-50' : ''}`}
+                    className={`bg-[#181c2e] border border-[#2a2e45] rounded-lg p-2.5 mb-2 cursor-pointer transition-all hover:border-[#6c5ce7] hover:-translate-y-[1px] group/task relative ${col.status === 'done' ? 'opacity-50' : ''}`}
                   >
                     <div className="text-xs font-medium mb-1.5">{task.title}</div>
                     <div className="flex items-center justify-between">
-                      <span className={`text-[9px] px-[7px] py-[2px] rounded-[6px] font-semibold ${tagColors[task.tagClass]}`}>
-                        {task.tag}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[9px] px-[7px] py-[2px] rounded-[6px] font-semibold ${tagColors[task.tagClass]}`}>
+                          {task.tag}
+                        </span>
+                        {task.department && (
+                          <span className="text-[9px] px-[6px] py-[1px] rounded-[4px] bg-[rgba(255,255,255,.05)] text-[#7b7f9e]">
+                            {task.department}
+                          </span>
+                        )}
+                      </div>
                       <div className="w-5 h-5 rounded-full bg-[#6c5ce7] flex items-center justify-center text-[9px] text-white font-bold">
                         {task.assignee}
                       </div>
+                    </div>
+
+                    {/* Action buttons on hover */}
+                    <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                      {col.status !== 'done' && (
+                        <button
+                          onClick={(e) => handleCancel(e, task.id)}
+                          className="w-5 h-5 rounded bg-[#2a2e45] hover:bg-[#e17055] flex items-center justify-center text-[8px] transition-colors"
+                          title="Cancel"
+                        >
+                          ✕
+                        </button>
+                      )}
+                      {col.status === 'done' && (
+                        <button
+                          onClick={(e) => handleDelete(e, task.id)}
+                          className="w-5 h-5 rounded bg-[#2a2e45] hover:bg-[#e17055] flex items-center justify-center text-[8px] transition-colors"
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))

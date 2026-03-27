@@ -1,6 +1,6 @@
 'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getTaskBoard, getTask, createTask, updateTask, submitTask, executeTask } from '@/lib/api';
+import { getTaskBoard, getTask, createTask, updateTask, deleteTask, submitTask, executeTask } from '@/lib/api';
 import { taskToTaskData } from '@/lib/adapters';
 import { tasks as mockTasks } from '@/data/mockData';
 import { useAppStore } from '@/store/useAppStore';
@@ -53,7 +53,11 @@ export function useTaskMutations() {
     mutationFn: ({ id, data }: { id: string; data: any }) => updateTask(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['taskBoard'] }),
   });
-  return { create, update };
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteTask(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['taskBoard'] }),
+  });
+  return { create, update, remove };
 }
 
 export function useSubmitTask() {
