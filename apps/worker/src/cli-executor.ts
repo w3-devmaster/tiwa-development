@@ -7,6 +7,7 @@ export interface CliExecutionOptions {
   prompt: string;
   workDir?: string;
   timeout?: number; // ms, default 300_000 (5 min)
+  onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void;
 }
 
 export interface CliExecutionResult {
@@ -53,8 +54,14 @@ export function executeWithCli(opts: CliExecutionOptions): Promise<CliExecutionR
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
-    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+      opts.onOutput?.(chunk.toString('utf-8'), 'stdout');
+    });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      opts.onOutput?.(chunk.toString('utf-8'), 'stderr');
+    });
 
     child.on('close', (code) => {
       clearTimeout(timer);

@@ -1,3 +1,6 @@
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { join } from 'node:path';
 import { executeWithCli, type CliProvider, type CliExecutionResult } from './cli-executor.js';
 import type { CliAvailability } from './cli-detector.js';
 
@@ -10,6 +13,8 @@ export interface TaskJobData {
   provider?: CliProvider;
   agentRole?: string;
   priority?: string;
+  gitRepo?: { url?: string; productionBranch?: string; developmentBranch?: string };
+  envFiles?: Record<string, string>;
 }
 
 export interface TaskResult {
@@ -82,13 +87,42 @@ function selectProvider(
   return 'claude';
 }
 
+async function setupWorkspace(data: TaskJobData): Promise<string> {
+  const workDir = data.projectPath || process.env.CLI_WORK_DIR || process.cwd();
+
+  if (!existsSync(workDir) && data.gitRepo?.url) {
+    console.log(`[Workspace] Cloning ${data.gitRepo.url} → ${workDir}`);
+    mkdirSync(workDir, { recursive: true });
+    execSync(`git clone ${data.gitRepo.url} .`, { cwd: workDir, stdio: 'inherit' });
+    const branch = data.gitRepo.developmentBranch || data.gitRepo.productionBranch || 'main';
+    try {
+      execSync(`git checkout ${branch}`, { cwd: workDir, stdio: 'inherit' });
+    } catch {
+      console.warn(`[Workspace] Branch "${branch}" not found, staying on default`);
+    }
+  }
+
+  // Write env files
+  if (data.envFiles && existsSync(workDir)) {
+    for (const [filename, content] of Object.entries(data.envFiles)) {
+      if (content) {
+        writeFileSync(join(workDir, filename), content, 'utf-8');
+        console.log(`[Workspace] Wrote ${filename}`);
+      }
+    }
+  }
+
+  return workDir;
+}
+
 export async function processTask(
   data: TaskJobData,
   cliTools?: CliAvailability,
+  onOutput?: (chunk: string, stream: 'stdout' | 'stderr') => void,
 ): Promise<TaskResult> {
   const defaultProvider = process.env.DEFAULT_CLI_PROVIDER;
   const timeout = parseInt(process.env.CLI_TIMEOUT || '300000', 10);
-  const workDir = data.projectPath || process.env.CLI_WORK_DIR || process.cwd();
+  const workDir = await setupWorkspace(data);
 
   const provider = selectProvider(data.provider, defaultProvider, cliTools);
   const prompt = buildPrompt(data);
@@ -101,6 +135,7 @@ export async function processTask(
     prompt,
     workDir,
     timeout,
+    onOutput,
   });
 
   console.log(`[Task ${data.taskId}] Finished in ${result.durationMs}ms (exit: ${result.exitCode})`);

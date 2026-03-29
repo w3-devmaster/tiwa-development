@@ -56,6 +56,10 @@ export class EventsGateway
     this.server.emit('worker:update', worker);
   }
 
+  emitWorkerOutput(data: unknown) {
+    this.server.emit('worker:output', data);
+  }
+
   emitChatMessage(message: unknown) {
     this.server.emit('chat:message', message);
   }

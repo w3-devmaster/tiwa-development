@@ -15,4 +15,8 @@ export class CreateProjectDto {
   @IsOptional()
   @IsObject()
   gitRepoJson?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  metadataJson?: Record<string, unknown>;
 }

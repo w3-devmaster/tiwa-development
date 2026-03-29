@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { WorkersService, HeartbeatDto } from './workers.service';
 
 @Controller('api/workers')
@@ -20,6 +20,21 @@ export class WorkersController {
     const worker = this.workersService.getWorker(id);
     if (!worker) throw new HttpException('Worker not found', HttpStatus.NOT_FOUND);
     return worker;
+  }
+
+  @Post()
+  addWorker(@Body() body: { host: string; port: number }) {
+    if (!body.host || !body.port) {
+      throw new HttpException('host and port are required', HttpStatus.BAD_REQUEST);
+    }
+    return this.workersService.addManualWorker(body.host, body.port);
+  }
+
+  @Delete(':id')
+  removeWorker(@Param('id') id: string) {
+    const deleted = this.workersService.removeWorker(id);
+    if (!deleted) throw new HttpException('Worker not found', HttpStatus.NOT_FOUND);
+    return { success: true, id };
   }
 
   @Post(':id/agent')

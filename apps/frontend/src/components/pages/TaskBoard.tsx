@@ -11,13 +11,15 @@ const columns = [
 ];
 
 const tagColors: Record<string, string> = {
-  be: 'bg-[rgba(116,185,255,.12)] text-[#74b9ff]',
-  fe: 'bg-[rgba(253,203,110,.12)] text-[#fdcb6e]',
-  qa: 'bg-[rgba(0,184,148,.12)] text-[#00b894]',
-  dv: 'bg-[rgba(108,92,231,.12)] text-[#6c5ce7]',
+  pl: 'bg-[rgba(108,92,231,.12)] text-[#6c5ce7]',
+  ar: 'bg-[rgba(162,155,254,.12)] text-[#a29bfe]',
+  bu: 'bg-[rgba(9,132,227,.12)] text-[#0984e3]',
+  te: 'bg-[rgba(0,184,148,.12)] text-[#00b894]',
+  rv: 'bg-[rgba(225,112,85,.12)] text-[#e17055]',
+  dv: 'bg-[rgba(99,110,114,.12)] text-[#636e72]',
 };
 
-const taskTypes = ['code', 'test', 'review', 'deploy', 'plan', 'fix'];
+const taskTypes = ['plan', 'design', 'code', 'test', 'review', 'deploy', 'fix'];
 const priorities = ['low', 'medium', 'high', 'critical'];
 
 export default function TaskBoard() {

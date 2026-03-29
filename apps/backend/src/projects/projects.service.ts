@@ -40,6 +40,7 @@ export class ProjectsService {
         description: dto.description,
         workspacePath: dto.workspacePath,
         gitRepoJson: JSON.stringify(dto.gitRepoJson || {}),
+        metadataJson: JSON.stringify(dto.metadataJson || {}),
       },
     });
   }

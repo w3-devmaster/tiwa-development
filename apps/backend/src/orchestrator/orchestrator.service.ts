@@ -1,30 +1,164 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProviderService } from '../ai-provider/ai-provider.service';
 import { EventsGateway } from '../events/events.gateway';
 import { WorkersService } from '../workers/workers.service';
+import { WorkflowsService } from '../workflows/workflows.service';
 
 const ROLE_MAP: Record<string, string[]> = {
-  code: ['backend', 'frontend'],
-  test: ['qa'],
-  review: ['reviewer', 'qa'],
+  plan: ['planner'],
+  design: ['architect'],
+  code: ['builder'],
+  test: ['tester'],
+  review: ['reviewer'],
   deploy: ['devops'],
-  plan: ['planner', 'backend'],
-  fix: ['backend', 'frontend'],
+  fix: ['builder'],
 };
 
-const DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
-  planner:
-    'You are an AI project planner. You analyze requirements and break them down into concrete, actionable tasks. Output structured plans with clear steps, dependencies, and estimated complexity.',
-  backend:
-    'You are an expert backend engineer specializing in Node.js, NestJS, TypeScript, databases, and APIs. Write clean, well-structured code. Explain your approach briefly before writing code.',
-  frontend:
-    'You are an expert frontend engineer specializing in React, Next.js, TypeScript, and modern CSS. Write clean, accessible, and performant UI code. Explain your approach briefly.',
-  qa: 'You are a QA engineer. Write thorough test cases, identify edge cases, and create test plans. When reviewing code, look for bugs, security issues, and performance problems.',
-  devops:
-    'You are a DevOps engineer specializing in CI/CD, Docker, Kubernetes, and cloud infrastructure. Provide deployment strategies, configuration files, and infrastructure code.',
-  reviewer:
-    'You are a senior code reviewer. Review code for correctness, security, performance, and maintainability. Provide specific, actionable feedback with code suggestions.',
+export const DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
+  planner: `Role:
+You are a senior product planner.
+
+Responsibility:
+Break requirement into clear implementation tasks.
+
+Input:
+- User requirement
+- Business rules
+
+Output:
+JSON:
+{
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "...",
+      "description": "...",
+      "target_role": "backend",
+      "acceptance_criteria": [],
+      "files_expected": []
+    }
+  ]
+}
+
+Rules:
+- Do not write code
+- Must include edge cases
+- Must include acceptance criteria`,
+
+  architect: `Role:
+You are a senior system architect.
+
+Responsibility:
+Design schema and module structure.
+
+Input:
+- Tasks from planner
+
+Output:
+{
+  "schema": "...",
+  "modules": [],
+  "api_contract": []
+}
+
+Rules:
+- Do not implement code
+- Focus on structure and design`,
+
+  builder: `Role:
+You are a senior full-stack developer (NestJS + React/Next.js).
+
+Responsibility:
+Implement backend and frontend code based on given design.
+
+Input:
+- Task
+- Schema
+- API contract
+- UI spec (if applicable)
+
+Output:
+{
+  "status": "done",
+  "changed_files": [],
+  "summary": "...",
+  "next_action": "test"
+}
+
+Rules:
+- Follow NestJS + Prisma best practices for backend
+- Follow React/Next.js best practices for frontend
+- Do not change schema unless instructed
+- Must handle edge cases
+- Must handle loading, error, empty states for UI
+- Must follow design system`,
+
+  tester: `Role:
+You are a QA engineer.
+
+Responsibility:
+Validate functionality using real tests.
+
+Input:
+- Codebase
+- Acceptance criteria
+
+Output:
+{
+  "status": "passed" | "failed",
+  "issues": [],
+  "failed_steps": []
+}
+
+Rules:
+- Must run real commands (test/build)
+- Do not assume correctness
+- Report exact failure`,
+
+  reviewer: `Role:
+You are a senior code reviewer.
+
+Responsibility:
+Check correctness against requirements.
+
+Input:
+- Code changes
+- Test results
+- Acceptance criteria
+
+Output:
+{
+  "status": "approved" | "needs_revision",
+  "issues": [],
+  "coverage_score": 0-100
+}
+
+Rules:
+- Must verify requirement coverage
+- Must identify missing logic
+- Do not approve incomplete work`,
+
+  devops: `Role:
+You are a DevOps engineer.
+
+Responsibility:
+Prepare deployment environment.
+
+Input:
+- Code
+- Environment config
+
+Output:
+{
+  "status": "ready",
+  "docker": "...",
+  "commands": []
+}
+
+Rules:
+- Must ensure reproducibility
+- Must validate environment variables`,
 };
 
 export interface ExecutionResult {
@@ -45,6 +179,8 @@ export class OrchestratorService {
     private aiProvider: AiProviderService,
     private events: EventsGateway,
     private workersService: WorkersService,
+    @Inject(forwardRef(() => WorkflowsService))
+    private workflowsService: WorkflowsService,
   ) {}
 
   async executeTask(taskId: string): Promise<ExecutionResult> {
@@ -147,6 +283,11 @@ export class OrchestratorService {
 
       this.logger.log(`Task "${task.title}" completed successfully via API`);
 
+      // Advance workflow if task belongs to one
+      if (task.workflowId) {
+        await this.workflowsService.advanceStep(task.workflowId, response.content);
+      }
+
       return {
         taskId,
         agentId: agent.id,
@@ -243,11 +384,17 @@ export class OrchestratorService {
   private buildSystemPrompt(agent: any): string {
     const raw = agent.configJson || '{}';
     const config = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, any>;
-    if (config.systemPrompt) return config.systemPrompt;
-    return (
-      DEFAULT_SYSTEM_PROMPTS[agent.role] ||
-      DEFAULT_SYSTEM_PROMPTS['backend']
-    );
+
+    // Department prompt = ALWAYS loaded as base
+    const deptKey = (agent.department || agent.role || 'builder').toLowerCase();
+    const deptPrompt = DEFAULT_SYSTEM_PROMPTS[deptKey] || DEFAULT_SYSTEM_PROMPTS['builder'];
+
+    // Agent's custom prompt = additional identity (appended if exists)
+    const agentPrompt = config.systemPrompt?.trim();
+    if (agentPrompt) {
+      return `${deptPrompt}\n\n---\n\n## Agent Identity\n${agentPrompt}`;
+    }
+    return deptPrompt;
   }
 
   private buildUserMessage(task: any): string {
@@ -298,7 +445,9 @@ export class OrchestratorService {
           description: task.description,
           agentRole: agent.role,
           priority: task.priority,
-          projectPath: task.project?.path,
+          projectPath: task.project?.workspacePath,
+          gitRepo: (() => { try { return typeof task.project?.gitRepoJson === 'string' ? JSON.parse(task.project.gitRepoJson) : task.project?.gitRepoJson; } catch { return undefined; } })(),
+          envFiles: (() => { try { const meta = typeof task.project?.metadataJson === 'string' ? JSON.parse(task.project.metadataJson) : task.project?.metadataJson; return meta?.envFiles; } catch { return undefined; } })(),
         }),
         signal: AbortSignal.timeout(5000),
       });
@@ -344,6 +493,11 @@ export class OrchestratorService {
       });
       this.events.emitTaskUpdate(updatedTask);
       this.logger.log(`Task "${task.title}" completed via worker ${result.workerId} (${result.provider} CLI)`);
+
+      // Advance workflow if task belongs to one
+      if (task.workflowId) {
+        await this.workflowsService.advanceStep(task.workflowId, result.content);
+      }
     } else {
       const updatedTask = await this.prisma.task.update({
         where: { id: result.taskId },

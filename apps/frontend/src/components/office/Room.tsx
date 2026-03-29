@@ -13,17 +13,21 @@ interface RoomData {
 }
 
 const iconBgs: Record<string, string> = {
-  be: 'bg-[rgba(116,185,255,.12)]',
-  fe: 'bg-[rgba(253,203,110,.12)]',
-  qa: 'bg-[rgba(0,184,148,.12)]',
-  dv: 'bg-[rgba(108,92,231,.12)]',
+  pl: 'bg-[rgba(108,92,231,.12)]',
+  ar: 'bg-[rgba(162,155,254,.12)]',
+  bu: 'bg-[rgba(9,132,227,.12)]',
+  te: 'bg-[rgba(0,184,148,.12)]',
+  rv: 'bg-[rgba(225,112,85,.12)]',
+  dv: 'bg-[rgba(99,110,114,.12)]',
 };
 
 const progColors: Record<string, string> = {
-  be: 'bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe]',
-  fe: 'bg-gradient-to-r from-[#fdcb6e] to-[#ffeaa7]',
-  qa: 'bg-gradient-to-r from-[#00b894] to-[#55efc4]',
-  dv: 'bg-gradient-to-r from-[#00b894] to-[#55efc4]',
+  pl: 'bg-gradient-to-r from-[#6c5ce7] to-[#a29bfe]',
+  ar: 'bg-gradient-to-r from-[#a29bfe] to-[#d0ccff]',
+  bu: 'bg-gradient-to-r from-[#0984e3] to-[#74b9ff]',
+  te: 'bg-gradient-to-r from-[#00b894] to-[#55efc4]',
+  rv: 'bg-gradient-to-r from-[#e17055] to-[#fab1a0]',
+  dv: 'bg-gradient-to-r from-[#636e72] to-[#b2bec3]',
 };
 
 export default function Room({ room, agents: allAgents = [], onClick, onAgentClick }: { room: RoomData; agents?: AgentData[]; onClick?: () => void; onAgentClick?: (agentId: string) => void }) {

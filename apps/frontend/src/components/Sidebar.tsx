@@ -31,6 +31,7 @@ export default function Sidebar() {
         { id: 'projects' as PageId, icon: '📁', label: 'Projects' },
         { id: 'skills' as PageId, icon: '📝', label: 'Skills' },
         { id: 'workflows' as PageId, icon: '🔄', label: 'Workflows' },
+        { id: 'workers' as PageId, icon: '🖥️', label: 'Workers' },
         { id: 'testing' as PageId, icon: '🧪', label: 'Testing', badge: errorCount ? String(errorCount) : undefined, badgeClass: 'bg-[#e17055]' },
       ],
     },

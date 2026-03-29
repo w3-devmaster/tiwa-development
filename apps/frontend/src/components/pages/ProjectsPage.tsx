@@ -9,6 +9,9 @@ interface ProjectForm {
   productionBranch: string;
   developmentBranch: string;
   workspacePath: string;
+  envFile: string;
+  envFileProd: string;
+  envFileDev: string;
 }
 
 const emptyForm: ProjectForm = {
@@ -18,9 +21,17 @@ const emptyForm: ProjectForm = {
   productionBranch: '',
   developmentBranch: '',
   workspacePath: '',
+  envFile: '',
+  envFileProd: '',
+  envFileDev: '',
 };
 
 function formToApi(form: ProjectForm) {
+  const envFiles: Record<string, string> = {};
+  if (form.envFile.trim()) envFiles['.env'] = form.envFile;
+  if (form.envFileProd.trim()) envFiles['.env.prod'] = form.envFileProd;
+  if (form.envFileDev.trim()) envFiles['.env.dev'] = form.envFileDev;
+
   return {
     name: form.name,
     description: form.description || undefined,
@@ -30,11 +41,14 @@ function formToApi(form: ProjectForm) {
       productionBranch: form.productionBranch || 'main',
       developmentBranch: form.developmentBranch || 'develop',
     },
+    metadataJson: Object.keys(envFiles).length > 0 ? { envFiles } : undefined,
   };
 }
 
 function projectToForm(project: any): ProjectForm {
   const git = project.gitRepoJson || {};
+  const meta = project.metadataJson || {};
+  const envFiles = meta.envFiles || {};
   return {
     name: project.name || '',
     description: project.description || '',
@@ -42,6 +56,9 @@ function projectToForm(project: any): ProjectForm {
     productionBranch: git.productionBranch || '',
     developmentBranch: git.developmentBranch || '',
     workspacePath: project.workspacePath || '',
+    envFile: envFiles['.env'] || '',
+    envFileProd: envFiles['.env.prod'] || '',
+    envFileDev: envFiles['.env.dev'] || '',
   };
 }
 
@@ -59,6 +76,7 @@ export default function ProjectsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProjectForm>(emptyForm);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [activeEnvTab, setActiveEnvTab] = useState<'.env' | '.env.prod' | '.env.dev'>('.env');
 
   const openCreate = () => {
     setForm(emptyForm);
@@ -322,6 +340,39 @@ export default function ProjectsPage() {
                 className="flex-1 bg-[#0a0c14] border border-[#2a2e45] rounded-r-lg px-3 py-2 text-sm text-[#e4e6f0] outline-none focus:border-[#6c5ce7] transition-colors"
               />
             </div>
+
+            {/* Environment Files */}
+            <label className="block text-xs text-[#7b7f9e] mb-1.5 font-medium">Environment Files</label>
+            <div className="flex gap-1 mb-2">
+              {(['.env', '.env.prod', '.env.dev'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveEnvTab(tab)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    activeEnvTab === tab
+                      ? 'bg-[#6c5ce7] text-white'
+                      : 'bg-[#0a0c14] text-[#7b7f9e] hover:text-[#e4e6f0] border border-[#2a2e45]'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={
+                activeEnvTab === '.env' ? form.envFile :
+                activeEnvTab === '.env.prod' ? form.envFileProd : form.envFileDev
+              }
+              onChange={(e) => {
+                const key = activeEnvTab === '.env' ? 'envFile' :
+                  activeEnvTab === '.env.prod' ? 'envFileProd' : 'envFileDev';
+                setForm({ ...form, [key]: e.target.value });
+              }}
+              placeholder={`# ${activeEnvTab}\nDATABASE_URL=...\nAPI_KEY=...`}
+              rows={6}
+              className="w-full bg-[#0a0c14] border border-[#2a2e45] rounded-lg px-3 py-2 text-sm text-[#e4e6f0] mb-6 outline-none focus:border-[#6c5ce7] transition-colors resize-none font-mono"
+            />
 
             {/* Buttons */}
             <div className="flex gap-2 justify-end">

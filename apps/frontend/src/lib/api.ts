@@ -52,7 +52,8 @@ export const deleteDepartment = (id: string) =>
 export const testAgentChat = (data: {
   provider: string;
   model: string;
-  systemPrompt: string;
+  systemPrompt?: string;
+  department?: string;
   testMessage?: string;
 }) =>
   fetchApi<{ success: boolean; response?: string; error?: string; model?: string; provider?: string; usage?: any }>(
@@ -82,6 +83,13 @@ export const updateProject = (id: string, data: any) =>
   fetchApi<any>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 export const deleteProject = (id: string) =>
   fetchApi<any>(`/api/projects/${id}`, { method: 'DELETE' });
+
+// Workers
+export const getWorkers = () => fetchApi<any[]>('/api/workers');
+export const addWorker = (data: { host: string; port: number }) =>
+  fetchApi<any>('/api/workers', { method: 'POST', body: JSON.stringify(data) });
+export const removeWorker = (id: string) =>
+  fetchApi<any>(`/api/workers/${id}`, { method: 'DELETE' });
 
 // Workflows
 export const getWorkflows = () => fetchApi<any[]>('/api/workflows');
@@ -117,9 +125,6 @@ export const getLogs = (dept?: string, limit?: number) => {
 // Chat
 export const getChatMessages = (roomId: string) =>
   fetchApi<any[]>(`/api/logs/chat/${roomId}`);
-
-// Workers
-export const getWorkers = () => fetchApi<any[]>('/api/workers');
 
 // Orchestrator
 export const submitTask = (data: {

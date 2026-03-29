@@ -5,10 +5,12 @@ import { useAgents, useRooms } from '@/hooks/useAgents';
 import { useChat } from '@/hooks/useChat';
 
 const tagColors: Record<string, string> = {
-  be: 'bg-[rgba(116,185,255,.12)]',
-  fe: 'bg-[rgba(253,203,110,.12)]',
-  qa: 'bg-[rgba(0,184,148,.12)]',
-  dv: 'bg-[rgba(108,92,231,.12)]',
+  pl: 'bg-[rgba(108,92,231,.12)]',
+  ar: 'bg-[rgba(162,155,254,.12)]',
+  bu: 'bg-[rgba(9,132,227,.12)]',
+  te: 'bg-[rgba(0,184,148,.12)]',
+  rv: 'bg-[rgba(225,112,85,.12)]',
+  dv: 'bg-[rgba(99,110,114,.12)]',
 };
 
 export default function RoomDetail() {

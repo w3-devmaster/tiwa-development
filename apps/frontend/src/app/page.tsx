@@ -13,6 +13,7 @@ import SettingsPage from '@/components/pages/SettingsPage';
 import ProjectsPage from '@/components/pages/ProjectsPage';
 import SkillsPage from '@/components/pages/SkillsPage';
 import CommandPage from '@/components/pages/CommandPage';
+import WorkersPage from '@/components/pages/WorkersPage';
 import RestartOverlay from '@/components/RestartOverlay';
 import PlaceholderPage from '@/components/pages/PlaceholderPage';
 import { useAppStore } from '@/store/useAppStore';
@@ -43,6 +44,7 @@ export default function Home() {
           {currentPage === 'projects' && <ProjectsPage />}
           {currentPage === 'skills' && <SkillsPage />}
           {currentPage === 'command' && <CommandPage />}
+          {currentPage === 'workers' && <WorkersPage />}
           {currentPage === 'settings' && <SettingsPage />}
           {placeholders[currentPage] && (
             <PlaceholderPage

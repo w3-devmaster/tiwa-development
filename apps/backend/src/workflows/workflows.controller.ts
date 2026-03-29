@@ -39,4 +39,9 @@ export class WorkflowsController {
   remove(@Param('id') id: string) {
     return this.workflowsService.remove(id);
   }
+
+  @Post(':id/start')
+  startWorkflow(@Param('id') id: string) {
+    return this.workflowsService.startWorkflow(id);
+  }
 }

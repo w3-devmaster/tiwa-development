@@ -78,7 +78,7 @@ export function useAgentMutations() {
 
 export function useTestAgent() {
   return useMutation({
-    mutationFn: (data: { provider: string; model: string; systemPrompt: string; testMessage?: string }) =>
+    mutationFn: (data: { provider: string; model: string; systemPrompt?: string; department?: string; testMessage?: string }) =>
       testAgentChat(data),
   });
 }

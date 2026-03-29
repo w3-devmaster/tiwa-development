@@ -50,9 +50,11 @@ export function useLiveLogs() {
     (dept: string) => {
       if (dept === 'all') return logs;
       const deptMap: Record<string, string> = {
-        backend: 'be',
-        frontend: 'fe',
-        qa: 'qa',
+        planner: 'pl',
+        architect: 'ar',
+        builder: 'bu',
+        tester: 'te',
+        reviewer: 'rv',
         devops: 'dv',
       };
       return logs.filter((l) => l.dept === deptMap[dept]);

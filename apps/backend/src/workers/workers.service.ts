@@ -85,6 +85,26 @@ export class WorkersService {
     return results;
   }
 
+  addManualWorker(host: string, port: number): WorkerInfo {
+    const id = `manual-${host}:${port}`;
+    const worker: WorkerInfo = {
+      id,
+      host,
+      port,
+      agents: [],
+      status: 'idle',
+      lastHeartbeat: new Date(),
+      startedAt: new Date(),
+      uptime: 0,
+    };
+    this.workers.set(id, worker);
+    return worker;
+  }
+
+  removeWorker(id: string): boolean {
+    return this.workers.delete(id);
+  }
+
   clearWorkers(): void {
     this.workers.clear();
   }

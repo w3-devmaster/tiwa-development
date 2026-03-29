@@ -65,14 +65,15 @@ function mapTaskStatus(status: string): 'todo' | 'in_progress' | 'review' | 'don
 /** Map backend task response to the frontend TaskData shape. */
 export function taskToTaskData(task: any): TaskData {
   const deptMap: Record<string, { tag: TaskData['tag']; tagClass: TaskData['tagClass'] }> = {
-    code: { tag: 'Backend', tagClass: 'be' },
-    test: { tag: 'QA', tagClass: 'qa' },
-    review: { tag: 'QA', tagClass: 'qa' },
+    plan: { tag: 'Planner', tagClass: 'pl' },
+    design: { tag: 'Architect', tagClass: 'ar' },
+    code: { tag: 'Builder', tagClass: 'bu' },
+    test: { tag: 'Tester', tagClass: 'te' },
+    review: { tag: 'Reviewer', tagClass: 'rv' },
     deploy: { tag: 'DevOps', tagClass: 'dv' },
-    plan: { tag: 'Backend', tagClass: 'be' },
-    fix: { tag: 'Frontend', tagClass: 'fe' },
+    fix: { tag: 'Builder', tagClass: 'bu' },
   };
-  const dept = deptMap[task.type] || { tag: 'Backend', tagClass: 'be' };
+  const dept = deptMap[task.type] || { tag: 'Builder', tagClass: 'bu' };
   return {
     id: task.id,
     title: task.title,
@@ -91,14 +92,16 @@ export function taskToTaskData(task: any): TaskData {
 /** Map backend log response to the frontend LogEntry shape. */
 export function apiLogToLogEntry(log: any): LogEntry {
   const deptClass: Record<string, LogEntry['dept']> = {
-    backend: 'be',
-    frontend: 'fe',
-    qa: 'qa',
+    planner: 'pl',
+    architect: 'ar',
+    builder: 'bu',
+    tester: 'te',
+    reviewer: 'rv',
     devops: 'dv',
   };
   return {
     agent: log.agentName || log.agent || '',
-    dept: deptClass[log.department] || 'be',
+    dept: deptClass[log.department] || 'bu',
     message: log.message || '',
     highlight: log.highlight || '',
   };
@@ -123,29 +126,41 @@ const deptConfig: Record<
   string,
   { name: string; icon: string; iconClass: string; dept: string }
 > = {
-  backend: {
-    name: 'Backend Engineering',
-    icon: '\u2699\uFE0F',
-    iconClass: 'be',
-    dept: 'API / Database / Services',
+  planner: {
+    name: 'Planner',
+    icon: '\uD83D\uDCD0',
+    iconClass: 'pl',
+    dept: 'Planning / Requirements',
   },
-  frontend: {
-    name: 'Frontend Engineering',
-    icon: '\uD83C\uDFA8',
-    iconClass: 'fe',
-    dept: 'UI / Components / Pages',
+  architect: {
+    name: 'Architect',
+    icon: '\uD83C\uDFD7\uFE0F',
+    iconClass: 'ar',
+    dept: 'Schema / Design',
   },
-  qa: {
-    name: 'Quality Assurance',
+  builder: {
+    name: 'Builder',
+    icon: '\uD83D\uDCBB',
+    iconClass: 'bu',
+    dept: 'Implementation / Code',
+  },
+  tester: {
+    name: 'Tester',
     icon: '\uD83E\uDDEA',
-    iconClass: 'qa',
-    dept: 'Testing / Review / QA',
+    iconClass: 'te',
+    dept: 'Testing / QA',
+  },
+  reviewer: {
+    name: 'Reviewer',
+    icon: '\uD83D\uDD0D',
+    iconClass: 'rv',
+    dept: 'Code Review',
   },
   devops: {
-    name: 'DevOps & Infrastructure',
+    name: 'DevOps',
     icon: '\uD83D\uDE80',
     iconClass: 'dv',
-    dept: 'CI/CD / Cloud / Monitoring',
+    dept: 'CI/CD / Deploy',
   },
 };
 
@@ -187,7 +202,7 @@ export function agentsToRooms(
     const config = deptConfig[dept] || {
       name: dept,
       icon: '\uD83D\uDCE6',
-      iconClass: 'be',
+      iconClass: 'bu',
       dept: '',
     };
     const active = deptAgents.filter(

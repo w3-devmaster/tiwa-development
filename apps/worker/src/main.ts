@@ -1,13 +1,28 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { networkInterfaces } from 'node:os';
+import { networkInterfaces, homedir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { detectCliTools, type CliAvailability } from './cli-detector.js';
 import { processTask, type TaskJobData, type TaskResult } from './processor.js';
 
-// Config from env
-const WORKER_PORT = parseInt(process.env.WORKER_PORT || '6770', 10);
+// Load config from ~/.tiwa/worker.json (lower priority than env vars)
+function loadFileConfig(): { backendUrl?: string; port?: number } {
+  try {
+    const configPath = join(homedir(), '.tiwa', 'worker.json');
+    if (existsSync(configPath)) {
+      return JSON.parse(readFileSync(configPath, 'utf-8'));
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
+const fileConfig = loadFileConfig();
+
+// Config priority: env vars > config file > defaults
+const WORKER_PORT = parseInt(process.env.WORKER_PORT || String(fileConfig.port || 6770), 10);
 const WORKER_HOST = process.env.WORKER_HOST || '0.0.0.0';
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:6769';
+const BACKEND_URL = process.env.BACKEND_URL || fileConfig.backendUrl || 'http://localhost:6769';
 const HEARTBEAT_INTERVAL = parseInt(process.env.HEARTBEAT_INTERVAL || '3000', 10);
 
 const WORKER_ID = `worker-${randomUUID().slice(0, 8)}`;
@@ -60,6 +75,24 @@ async function reportTaskResult(taskId: string, result: TaskResult): Promise<voi
     }
   } catch (err) {
     console.error(`[Report] Failed to report result for task ${taskId}:`, (err as Error).message);
+  }
+}
+
+// ========== Stream Reporting ==========
+async function streamChunkToBackend(
+  taskId: string,
+  chunk: string,
+  stream: 'stdout' | 'stderr',
+): Promise<void> {
+  try {
+    await fetch(`${BACKEND_URL}/api/orchestrator/worker-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workerId: WORKER_ID, taskId, chunk, stream }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    // Non-critical — don't block execution
   }
 }
 
@@ -188,10 +221,17 @@ const server = http.createServer(async (req, res) => {
         provider: body.provider,
         agentRole: body.agentRole,
         priority: body.priority,
+        gitRepo: body.gitRepo,
+        envFiles: body.envFiles,
+      };
+
+      // Stream callback — sends CLI output chunks to backend in realtime
+      const onOutput = (chunk: string, stream: 'stdout' | 'stderr') => {
+        streamChunkToBackend(jobData.taskId, chunk, stream);
       };
 
       // Process async — respond immediately, report result later
-      processTask(jobData, cliTools)
+      processTask(jobData, cliTools, onOutput)
         .then(async (result) => {
           console.log(`[Task] ${jobData.taskId} ${result.status} (${result.provider}, ${result.durationMs}ms)`);
           await reportTaskResult(jobData.taskId, result);

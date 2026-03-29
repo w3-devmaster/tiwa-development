@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { SettingsService } from './settings.service';
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/generative-language',
   'https://www.googleapis.com/auth/cloud-platform',
 ];
 

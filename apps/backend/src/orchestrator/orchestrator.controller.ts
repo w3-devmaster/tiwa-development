@@ -7,7 +7,7 @@ import {
   Logger,
   HttpCode,
 } from '@nestjs/common';
-import { OrchestratorService } from './orchestrator.service';
+import { OrchestratorService, DEFAULT_SYSTEM_PROMPTS } from './orchestrator.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsGateway } from '../events/events.gateway';
 import { InProcessQueueService } from '../queue/in-process-queue.service';
@@ -64,6 +64,20 @@ class WorkerResultDto {
   durationMs?: number;
 }
 
+class WorkerStreamDto {
+  @IsString()
+  workerId: string;
+
+  @IsString()
+  taskId: string;
+
+  @IsString()
+  chunk: string;
+
+  @IsString()
+  stream: string; // 'stdout' | 'stderr'
+}
+
 class TestAgentDto {
   @IsString()
   provider: string;
@@ -72,7 +86,12 @@ class TestAgentDto {
   model: string;
 
   @IsString()
-  systemPrompt: string;
+  @IsOptional()
+  systemPrompt?: string;
+
+  @IsString()
+  @IsOptional()
+  department?: string;
 
   @IsString()
   @IsOptional()
@@ -136,17 +155,38 @@ export class OrchestratorController {
     });
   }
 
+  @Post('worker-stream')
+  @HttpCode(200)
+  async workerStream(@Body() dto: WorkerStreamDto) {
+    this.events.emitWorkerOutput({
+      taskId: dto.taskId,
+      workerId: dto.workerId,
+      chunk: dto.chunk,
+      stream: dto.stream,
+      timestamp: new Date().toISOString(),
+    });
+    return { ok: true };
+  }
+
   @Post('test-agent')
   @HttpCode(200)
   async testAgent(@Body() dto: TestAgentDto) {
-    this.logger.log(`Testing agent: provider=${dto.provider}, model=${dto.model}`);
+    this.logger.log(`Testing agent: provider=${dto.provider}, model=${dto.model}, department=${dto.department}`);
     const message = dto.testMessage || 'สวัสดี แนะนำตัวเองหน่อย';
+
+    // Build merged prompt: department base + agent identity
+    const deptKey = (dto.department || 'builder').toLowerCase();
+    const deptPrompt = DEFAULT_SYSTEM_PROMPTS[deptKey] || DEFAULT_SYSTEM_PROMPTS['builder'];
+    const agentPrompt = dto.systemPrompt?.trim();
+    const fullPrompt = agentPrompt
+      ? `${deptPrompt}\n\n---\n\n## Agent Identity\n${agentPrompt}`
+      : deptPrompt;
 
     try {
       await this.aiProvider.reinitialize();
       const response = await this.aiProvider.chat({
         model: dto.model,
-        systemPrompt: dto.systemPrompt,
+        systemPrompt: fullPrompt,
         messages: [{ role: 'user', content: message }],
         maxTokens: 1024,
       });

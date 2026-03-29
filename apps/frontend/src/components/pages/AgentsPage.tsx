@@ -115,7 +115,7 @@ export default function AgentsPage() {
     if (!form.name.trim()) return;
     const data = {
       name: form.name,
-      role: form.role || 'backend',
+      role: form.role || 'builder',
       model: form.model,
       department: form.department,
       displayConfig: {
@@ -123,7 +123,7 @@ export default function AgentsPage() {
         avatar: { bg: `linear-gradient(135deg,#6c5ce7,#a29bfe)`, letter: form.name[0]?.toUpperCase() || 'A' },
       },
       configJson: {
-        systemPrompt: form.systemPrompt,
+        systemPrompt: form.systemPrompt || '',  // agent's custom identity only (dept prompt merged at runtime)
         provider: form.provider,
       },
     };
@@ -142,12 +142,18 @@ export default function AgentsPage() {
     setTestResult(null);
   };
 
+  /** When department changes, just update the department (dept prompt is merged by backend at runtime) */
+  const handleDepartmentChange = (newDept: string) => {
+    setForm({ ...form, department: newDept });
+  };
+
   const handleTest = async () => {
     setTestResult(null);
     const result = await testAgent.mutateAsync({
       provider: form.provider,
       model: form.model,
-      systemPrompt: form.systemPrompt || `You are ${form.name || 'an AI assistant'}. Introduce yourself briefly in Thai.`,
+      systemPrompt: form.systemPrompt || '',  // agent's custom identity prompt only
+      department: form.department,              // backend merges dept prompt + agent prompt
     });
     setTestResult(result);
   };
@@ -350,7 +356,7 @@ export default function AgentsPage() {
             <label className="block text-xs text-[#7b7f9e] mb-1.5 font-medium">Department</label>
             <select
               value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
+              onChange={(e) => handleDepartmentChange(e.target.value)}
               className="w-full bg-[#0a0c14] border border-[#2a2e45] rounded-lg px-3 py-2 text-sm text-[#e4e6f0] mb-4 outline-none focus:border-[#6c5ce7] transition-colors"
             >
               <option value="">-- Select Department --</option>
@@ -426,8 +432,8 @@ export default function AgentsPage() {
             <textarea
               value={form.systemPrompt}
               onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
-              placeholder={`You are ${form.name || '[Name]'}, a ${form.role || '[Role]'} at Tiwa. You specialize in...`}
-              rows={5}
+              placeholder={`(Optional) ระบุตัวตนเพิ่มเติม เช่น ชื่อ ความเชี่ยวชาญ สไตล์การทำงาน...\nPrompt หลักของฝ่าย${form.department ? ` "${form.department}"` : ''} จะถูกโหลดให้อัตโนมัติเสมอ`}
+              rows={8}
               className="w-full bg-[#0a0c14] border border-[#2a2e45] rounded-lg px-3 py-2 text-sm text-[#e4e6f0] mb-4 outline-none focus:border-[#6c5ce7] transition-colors resize-none font-mono"
             />
 

@@ -3,17 +3,21 @@ import { useState, useEffect, useRef } from 'react';
 import { useLiveLogs } from '@/hooks/useLogs';
 
 const deptColors: Record<string, string> = {
-  be: 'text-[#74b9ff]',
-  fe: 'text-[#fdcb6e]',
-  qa: 'text-[#00b894]',
-  dv: 'text-[#6c5ce7]',
+  pl: 'text-[#6c5ce7]',
+  ar: 'text-[#a29bfe]',
+  bu: 'text-[#0984e3]',
+  te: 'text-[#00b894]',
+  rv: 'text-[#e17055]',
+  dv: 'text-[#636e72]',
 };
 
 const tabs = [
   { label: 'All', dept: 'all' },
-  { label: 'Backend', dept: 'backend' },
-  { label: 'Frontend', dept: 'frontend' },
-  { label: 'QA', dept: 'qa' },
+  { label: 'Planner', dept: 'planner' },
+  { label: 'Architect', dept: 'architect' },
+  { label: 'Builder', dept: 'builder' },
+  { label: 'Tester', dept: 'tester' },
+  { label: 'Reviewer', dept: 'reviewer' },
   { label: 'DevOps', dept: 'devops' },
 ];
 
