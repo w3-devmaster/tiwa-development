@@ -162,5 +162,3 @@ node apps/cli/bin/run.js <command>
 
 - Node.js >= 20
 - Tiwa Backend ต้องรันอยู่ (สำหรับคำสั่ง agents, project, run)
-
-### TEST Upload Git

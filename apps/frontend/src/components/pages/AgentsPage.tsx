@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRawAgents, useAgentMutations, useTestAgent } from '@/hooks/useAgents';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useSkills } from '@/hooks/useSkills';
@@ -64,12 +64,19 @@ export default function AgentsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // Get available providers from settings
-  const availableProviders = (() => {
+  const availableProviders = useMemo(() => {
     if (!settings?.providers) return ['anthropic', 'openai', 'gemini'];
     return Object.entries(settings.providers)
       .filter(([, cfg]: [string, any]) => cfg?.enabled || cfg?.apiKey)
       .map(([name]) => name);
-  })();
+  }, [settings?.providers]);
+
+  // Auto-correct provider when current selection is not available
+  useEffect(() => {
+    if (availableProviders.length > 0 && !availableProviders.includes(form.provider)) {
+      setForm((prev) => ({ ...prev, provider: availableProviders[0] }));
+    }
+  }, [form.provider, availableProviders]);
 
   // Provider-Model cascade
   useEffect(() => {
